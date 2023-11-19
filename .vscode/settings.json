@@ -1,0 +1,6 @@
+{
+    "evenBetterToml.schema.associations": {
+        ".*_theme\\.toml": "https://raw.githubusercontent.com/taiki-e/iced_style_config/main/schema.json",
+    },
+    "rust-analyzer.showUnlinkedFileNotification": false
+}

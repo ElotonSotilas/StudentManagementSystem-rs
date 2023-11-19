@@ -1,0 +1,27 @@
+[package]
+name = "student_sys"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Database and async runtime
+rusqlite = { version = "0.30.0", features = ["bundled"] }
+tokio = { version = "*", features = ["full"] }
+
+# Iced for GUI
+iced = { version = "0.10", features = ["image", "svg", "wgpu"] }
+iced_aw = "*"
+iced-hex-color = "0.1.1"
+iced_style_config = "0.2"
+
+# Easier error handling
+anyhow = "*"
+
+# Extra types
+chrono = "*"
+regex = "*"
+
+# Hashing
+argon2 = "*"
