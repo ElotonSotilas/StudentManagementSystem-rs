@@ -2,6 +2,7 @@
 
 use anyhow::Ok;
 use anyhow::Result;
+use chrono::format;
 use rusqlite::types::ValueRef;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -178,7 +179,7 @@ impl DbDriver {
         let conditions = filters.iter().map(|f| f.to_sql()).collect::<Vec<String>>();
         let join_mode = assoc.unwrap_or(Associativity::And);
         let sql = format!(
-            "SELECT * FROM {} WHERE {{{}}}",
+            "SELECT * FROM {} WHERE {}",
             param,
             conditions.join(&join_mode.to_string())
         );
@@ -200,7 +201,7 @@ impl DbDriver {
                     ValueRef::Integer(i) => i.to_string(),
                     ValueRef::Real(f) => f.to_string(),
                     ValueRef::Text(t) => String::from_utf8_lossy(t).to_string(),
-                    ValueRef::Blob(b) => String::from_utf8(b.to_vec()).unwrap(),
+                    ValueRef::Blob(b) => String::from_utf8_lossy(b).to_string(),
                 };
                 hm.insert(col.to_string(), value);
             }
@@ -352,7 +353,7 @@ impl DbDriver {
         let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
         let separator = join_mode.to_string();
         let sql = format!(
-            "SELECT * FROM DEPARTMENTS WHERE {{{}}}",
+            "SELECT * FROM DEPARTMENTS WHERE {}",
             conditions.join(&separator)
         );
 
@@ -384,7 +385,7 @@ impl DbDriver {
         let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
         let separator = join_mode.to_string();
         let sql = format!(
-            "SELECT * FROM STUDENT_COURSES WHERE {{{}}}",
+            "SELECT * FROM STUDENT_COURSES WHERE {}",
             conditions.join(&separator)
         );
 
@@ -418,7 +419,7 @@ impl DbDriver {
         let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
         let separator = join_mode.to_string();
         let sql = format!(
-            "SELECT * FROM COURSES WHERE {{{}}}",
+            "SELECT * FROM COURSES WHERE {}",
             conditions.join(&separator)
         );
 
@@ -431,17 +432,19 @@ impl DbDriver {
             let id: i32 = row.get(0)?;
             let teacher_id: i32 = row.get(1)?;
             let course: String = row.get(2)?;
-            let cr_cost: i32 = row.get(3)?;
-            let created_at: String = row.get(4)?;
-            let updated_at: String = row.get(5)?;
+            let course_nr: String = row.get(3)?;
+            let description = row.get(4)?;
+            let cr_cost: i32 = row.get(5)?;
+            let timeslots: String = row.get(6)?;
 
             courses.push(ReceiverType::Course(Course {
                 id,
                 teacher_id,
                 course,
+                course_nr,
+                description,
                 cr_cost,
-                created_at,
-                updated_at
+                timeslots
             }))
         }
 
@@ -456,7 +459,7 @@ impl DbDriver {
         let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
         let separator = join_mode.to_string();
         let sql = format!(
-            "SELECT * FROM TEACHER_ACCOUNT WHERE {{{}}}",
+            "SELECT * FROM TEACHER_ACCOUNT WHERE {}",
             conditions.join(&separator)
         );
 
@@ -494,7 +497,7 @@ impl DbDriver {
         let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
         let separator = join_mode.to_string();
         let sql = format!(
-            "SELECT * FROM STUDENT_ACCOUNT WHERE {{{}}}",
+            "SELECT * FROM STUDENT_ACCOUNT WHERE {}",
             conditions.join(&separator)
         );
 
@@ -535,12 +538,16 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: &Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM USERS WHERE {{{}}}",
-            conditions.join(&separator)
-        );
+        let sql = if filters.is_empty() {
+            format!("SELECT * FROM USERS")
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM USERS WHERE {}",
+                conditions.join(&separator)
+            )
+        };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
 

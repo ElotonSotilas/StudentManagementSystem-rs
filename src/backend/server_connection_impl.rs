@@ -89,12 +89,13 @@ impl ServerConnection {
             return Err(anyhow!("Must be signed out."));
         }
 
-        let email_regex = Regex::new(
-            r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@aubg.edu",
-        )?;
-        let phone_regex = Regex::new(r"^\+?([0-9]{2})\)?[-. ]?([0-9]{4})[-. ]?([0-9]{4})$")?;
-        let password_regex =
-            Regex::new(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$")?;
+        let email_regex = Regex::new(r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@aubg\.edu$")?;
+        let phone_regex = Regex::new(r#"^\+?[0-9]{2}[-. ]?[0-9]{4}[-. ]?[0-9]{4}$"#)?;
+        let password_rules = user.password.len() >= 8
+            && user.password.chars().any(|c| c.is_ascii_lowercase())
+            && user.password.chars().any(|c| c.is_ascii_uppercase())
+            && user.password.chars().any(|c| c.is_ascii_digit())
+            && user.password.chars().any(|c| "@$!%*?&".contains(c));
 
         if self
             .get_users_by_filters(vec![Filter::Users(UsersFilter::Email(
@@ -103,7 +104,7 @@ impl ServerConnection {
             .len()
             > 0
         {
-            return Err(anyhow!("User already exists."));
+            return Err(anyhow!("A user with this email already exists."));
         }
 
         if user.username.is_empty() {
@@ -114,11 +115,11 @@ impl ServerConnection {
             return Err(anyhow!("Must be a valid AUBG email."));
         }
 
-        if !phone_regex.is_match(&user.phone) {
+        if !phone_regex.is_match(&user.phone) && !user.phone.is_empty() {
             return Err(anyhow!("Invalid phone number."));
         }
 
-        if !password_regex.is_match(&user.password) {
+        if !password_rules {
             return Err(anyhow!(
                 "The password does not meet the following criteria:\n
             - Must be at least 8 characters long\n
@@ -131,7 +132,7 @@ impl ServerConnection {
 
         let mut user = user.to_owned();
 
-        let salt = password::generate_salt(&user.email);
+        let salt = password::generate_salt();
         user.password = password::hash(&user.password, salt);
 
         self.db.insert(vec![ReceiverType::User(user)])?;
@@ -139,9 +140,8 @@ impl ServerConnection {
         Ok(())
     }
 
-    pub fn login(&mut self, username: String, password: String) -> Result<()> {
-        let binding =
-            self.get_users_by_filters(vec![Filter::Users(UsersFilter::Username(username))])?;
+    pub fn login(&mut self, email: String, password: String) -> Result<()> {
+        let binding = self.get_users_by_filters(vec![Filter::Users(UsersFilter::Email(email))])?;
         let user = binding.get(0).ok_or_else(|| anyhow!("User not found."))?; // if none, user not found
 
         // If the user is suspended, they cannot login
@@ -149,13 +149,8 @@ impl ServerConnection {
             return Err(anyhow!("User is suspended."));
         }
 
-        let salt = password::fetch_salt(&user.username);
-
-        let pw = password::hash(&user.password, salt.clone()); // on server
-        let pw2 = password::hash(&password, salt.clone()); // from client
-
         // check hash for validity and then compare both server and client password hashes
-        if password::verify(salt, &password) && pw == pw2 {
+        if password::verify(&user.password, &password) {
             self.session = Some(user.to_owned());
             Ok(())
         } else {

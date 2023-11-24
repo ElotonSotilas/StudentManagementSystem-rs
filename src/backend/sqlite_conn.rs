@@ -21,7 +21,7 @@ impl DatabaseConnection {
                 "username" TEXT NOT NULL,
                 "password" TEXT NOT NULL,
                 "email" TEXT NOT NULL UNIQUE,
-                "phone" TEXT NOT NULL,
+                "phone" TEXT,
                 "verified" BOOLEAN NOT NULL,
                 "suspended" BOOLEAN NOT NULL,
                 "forcenewpw" BOOLEAN NOT NULL,
@@ -32,7 +32,7 @@ impl DatabaseConnection {
             CREATE TABLE IF NOT EXISTS "STUDENT_ACCOUNT" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "student_id" INTEGER NOT NULL UNIQUE,
-                "advisor_id" INTEGER NOT NULL,
+                "advisor_id" INTEGER,
                 "discipline" TEXT NOT NULL,
                 "enrollment" TEXT NOT NULL,
                 "cgpa" REAL NOT NULL,
@@ -58,7 +58,10 @@ impl DatabaseConnection {
                 "id" INTEGER NOT NULL,
                 "teacher_id" INTEGER NOT NULL,
                 "course" TEXT NOT NULL,
+                "course_nr" TEXT NOT NULL,
+                "description" TEXT,
                 "cr_cost" INTEGER NOT NULL,
+                "timeslots" TEXT NOT NULL,
                 FOREIGN KEY ("teacher_id") REFERENCES "USERS"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
