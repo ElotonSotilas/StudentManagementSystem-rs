@@ -1,6 +1,7 @@
-use std::fmt::format;
+// use std::fmt::format;
 
 use actix_web::{get, HttpResponse, Responder};
+use serde_derive::Serialize;
 use serde_json::json;
 
 use crate::backend::table_models::User;
@@ -10,6 +11,22 @@ use super::{
     server_connection_impl::*,
     table_models::Course,
 };
+
+#[derive(Serialize)]
+pub struct GenericResponse {
+    pub status: String,
+    pub message: String,
+}
+
+#[get("/health_checker")]
+async fn health_checker() -> impl Responder {
+    const MESSAGE: &str = "Everything is functional";
+    let response_json = &GenericResponse {
+        status: "success".to_string(),
+        message: MESSAGE.to_string(),
+    };
+    HttpResponse::Ok().json(response_json)
+}
 
 #[get("/")]
 pub async fn index() -> impl Responder {
