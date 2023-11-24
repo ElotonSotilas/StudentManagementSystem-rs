@@ -47,8 +47,6 @@ pub struct User {
     pub password: String,
     pub email: String,
     pub phone: String,
-    pub created_at: String,
-    pub updated_at: String,
     pub verified: bool,
     pub suspended: bool,
     pub forcenewpw: bool,
@@ -60,16 +58,16 @@ impl ToSQL for User {
         match a {
             Action::Insert => format!(
                 "INSERT INTO USERS (username, password, email, phone, created_at, updated_at, 
-                    verified, suspended, forcenewpw, role) VALUES ('{}', '{}', '{}', '{}', '{}', '{}', {}, {}, {}, '{}')",
-                self.username, self.password, self.email, self.phone, self.created_at, self.updated_at, 
+                    verified, suspended, forcenewpw, role) VALUES ('{}', '{}', '{}', '{}', {}, {}, {}, '{}')",
+                self.username, self.password, self.email, self.phone, 
                     self.verified, self.suspended, self.forcenewpw, self.role
             ),
 
             Action::Update => format!(
                 "UPDATE USERS SET username = '{}', password = '{}', email = '{}', phone = '{}', 
-                    created_at = '{}', updated_at = '{}', verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
+                    verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
                     WHERE id = {}",
-                self.username, self.password, self.email, self.phone, self.created_at, self.updated_at, 
+                self.username, self.password, self.email, self.phone, 
                     self.verified, self.suspended, self.forcenewpw, self.role, self.id
             ),
 

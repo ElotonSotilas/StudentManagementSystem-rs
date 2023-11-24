@@ -806,14 +806,6 @@ impl ServerConnection {
             return Err(anyhow!("Username cannot be changed."));
         }
 
-        if user.created_at != u.created_at {
-            return Err(anyhow!("Created at cannot be changed."));
-        }
-
-        if user.updated_at != u.updated_at {
-            return Err(anyhow!("Updated at cannot be changed."));
-        }
-
         if user.suspended != u.suspended {
             return Err(anyhow!("Suspended cannot be changed."));
         }
@@ -835,16 +827,6 @@ impl ServerConnection {
         let binding =
             self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
-
-        // Check permissions
-
-        if user.created_at != u.created_at {
-            return Err(anyhow!("Date of creation is managed by the system."));
-        }
-
-        if user.updated_at != u.updated_at {
-            return Err(anyhow!("Date of modification is managed by the system."));
-        }
 
         self.db.update(vec![ReceiverType::User(user)])?;
 

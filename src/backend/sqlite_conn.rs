@@ -13,17 +13,10 @@ impl DatabaseConnection {
     }
 
     pub fn create_tables(&mut self) -> Result<&mut Self> {
-        let table_count = self.connection.query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='tableName';",
-            (),
-            |row| row.get::<usize, usize>(0),
-        )?;
-
-        if table_count == 0 {
             self.connection.execute_batch(
                 r#"
             BEGIN;
-            CREATE TABLE "USERS" (
+            CREATE TABLE IF NOT EXISTS "USERS" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "username" TEXT NOT NULL,
                 "password" TEXT NOT NULL,
@@ -36,7 +29,7 @@ impl DatabaseConnection {
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
 
-            CREATE TABLE "STUDENT_ACCOUNT" (
+            CREATE TABLE IF NOT EXISTS "STUDENT_ACCOUNT" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "student_id" INTEGER NOT NULL UNIQUE,
                 "advisor_id" INTEGER NOT NULL,
@@ -51,7 +44,7 @@ impl DatabaseConnection {
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             
-            CREATE TABLE "TEACHER_ACCOUNT" (
+            CREATE TABLE IF NOT EXISTS "TEACHER_ACCOUNT" (
                 "id" INTEGER NOT NULL,
                 "teacher_id" INTEGER NOT NULL,
                 "dept_id" INTEGER NOT NULL,
@@ -61,36 +54,35 @@ impl DatabaseConnection {
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             
-            CREATE TABLE "COURSES" (
+            CREATE TABLE IF NOT EXISTS "COURSES" (
                 "id" INTEGER NOT NULL,
                 "teacher_id" INTEGER NOT NULL,
                 "course" TEXT NOT NULL,
                 "cr_cost" INTEGER NOT NULL,
-                FOREIGN KEY ("teacher_id") REFERENCES USERS("id"),
+                FOREIGN KEY ("teacher_id") REFERENCES "USERS"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             
-            CREATE TABLE "STUDENT_COURSES" (
+            CREATE TABLE IF NOT EXISTS "STUDENT_COURSES" (
                 "student_id" INTEGER NOT NULL,
                 "course_id" INTEGER NOT NULL,
                 "grade" REAL NOT NULL,
                 "semester" TEXT NOT NULL,
-                FOREIGN KEY ("student_id") REFERENCES USERS("id"),
-                FOREIGN KEY ("course_id") REFERENCES COURSES("id")
+                FOREIGN KEY ("student_id") REFERENCES "USERS"("id"),
+                FOREIGN KEY ("course_id") REFERENCES "COURSES"("id")
             );
             
-            CREATE TABLE "DEPARTMENTS" (
+            CREATE TABLE IF NOT EXISTS "DEPARTMENTS" (
                 "id" INTEGER NOT NULL,
                 "dept_head" INTEGER NOT NULL,
                 "name" TEXT NOT NULL,
-                FOREIGN KEY ("dept_head") REFERENCES TEACHER_ACCOUNT("id"),
+                FOREIGN KEY ("dept_head") REFERENCES "TEACHER_ACCOUNT"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             COMMIT;
             "#,
             )?;
-        }
 
         Ok(self)
-    }
+    } 
 }

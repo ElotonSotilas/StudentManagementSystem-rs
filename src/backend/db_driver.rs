@@ -553,12 +553,10 @@ impl DbDriver {
             let password: String = row.get(2)?;
             let email: String = row.get(3)?;
             let phone: String = row.get(4)?;
-            let created_at: String = row.get(5)?;
-            let updated_at: String = row.get(6)?;
-            let verified: bool = row.get(7)?;
-            let suspended: bool = row.get(8)?;
-            let forcenewpw: bool = row.get(9)?;
-            let role: String = row.get(10)?;
+            let verified: bool = row.get(5)?;
+            let suspended: bool = row.get(6)?;
+            let forcenewpw: bool = row.get(7)?;
+            let role: String = row.get(8)?;
 
             users.push(ReceiverType::User(User {
                 id,
@@ -566,8 +564,6 @@ impl DbDriver {
                 password,
                 email,
                 phone,
-                created_at,
-                updated_at,
                 verified,
                 suspended,
                 forcenewpw,

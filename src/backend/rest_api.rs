@@ -386,8 +386,6 @@ pub async fn register(req: actix_web::HttpRequest) -> impl Responder {
         password,
         email,
         phone,
-        created_at: String::new(),
-        updated_at: String::new(),
         verified: false,
         suspended: false,
         forcenewpw: false,
