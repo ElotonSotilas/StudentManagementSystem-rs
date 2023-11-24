@@ -11,7 +11,7 @@ use super::{
 
 #[get("/")]
 pub async fn index() -> impl Responder {
-    HttpResponse::Ok().json(json!({"message": "Successfully connected to the server!"}))
+    HttpResponse::Ok().json(json!({"success": true}))
 }
 
 #[get("/users")]
