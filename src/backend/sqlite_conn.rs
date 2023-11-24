@@ -23,7 +23,7 @@ impl DatabaseConnection {
             self.connection.execute_batch(
                 r#"
             BEGIN;
-            CREATE TABLE USERS (
+            CREATE TABLE "USERS" (
                 id INTEGER PRIMARY KEY NOT NULL,
                 username TEXT NOT NULL,
                 password TEXT NOT NULL,
@@ -44,7 +44,7 @@ impl DatabaseConnection {
                UPDATE USERS SET updated_at = DATE('now') WHERE id = OLD.id;
             END;
             
-            CREATE TABLE STUDENT_ACCOUNT (
+            CREATE TABLE "STUDENT_ACCOUNT" (
                 id INTEGER PRIMARY KEY NOT NULL,
                 student_id INTEGER NOT NULL,
                 advisor_id INTEGER NOT NULL,
@@ -58,7 +58,7 @@ impl DatabaseConnection {
                 FOREIGN KEY (advisor_id) REFERENCES USERS(id)
             );
             
-            CREATE TABLE TEACHER_ACCOUNT (
+            CREATE TABLE "TEACHER_ACCOUNT" (
                 id INTEGER PRIMARY KEY NOT NULL,
                 teacher_id INTEGER NOT NULL,
                 dept_id INTEGER NOT NULL,
@@ -67,7 +67,7 @@ impl DatabaseConnection {
                 FOREIGN KEY (dept_id) REFERENCES DEPARTMENTS(id)
             );
             
-            CREATE TABLE COURSES (
+            CREATE TABLE "COURSES" (
                 id INTEGER PRIMARY KEY NOT NULL,
                 teacher_id INTEGER NOT NULL,
                 course TEXT NOT NULL,
@@ -84,7 +84,7 @@ impl DatabaseConnection {
                UPDATE COURSES SET updated_at = DATE('now') WHERE id = OLD.id;
             END;
             
-            CREATE TABLE STUDENT_COURSES (
+            CREATE TABLE "STUDENT_COURSES" (
                 student_id INTEGER NOT NULL,
                 course_id INTEGER NOT NULL,
                 grade REAL NOT NULL,

@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use actix_web::{get, HttpResponse, Responder};
 use serde_json::json;
 
@@ -13,7 +11,7 @@ use super::{
 
 #[get("/")]
 pub async fn index() -> impl Responder {
-    HttpResponse::Ok().body("Successfully connected to the server!")
+    HttpResponse::Ok().json(json!({"message": "Successfully connected to the server!"}))
 }
 
 #[get("/users")]
