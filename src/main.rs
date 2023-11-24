@@ -10,6 +10,7 @@ async fn main() -> std::io::Result<()> {
     let http_server = HttpServer::new(|| {
         App::new()
             .service(index)
+            .service(health_checker)
             .service(users)
             .service(students)
             .service(teachers)
