@@ -1,7 +1,5 @@
-#![allow(dead_code)]
-
 use std::fmt::{Display, Formatter};
-use chrono::NaiveDate;
+use serde_derive::{Deserialize, Serialize};
 use super::db_driver::Join;
 
 pub enum Action {
@@ -42,15 +40,15 @@ pub trait ToSQL {
     fn to_sql(&self, a: Action) -> String;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: i32,
     pub username: String,
     pub password: String,
     pub email: String,
     pub phone: String,
-    pub created_at: NaiveDate,
-    pub updated_at: NaiveDate,
+    pub created_at: String,
+    pub updated_at: String,
     pub verified: bool,
     pub suspended: bool,
     pub forcenewpw: bool,
@@ -82,7 +80,7 @@ impl ToSQL for User {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudentAccount {
     pub id: i32,
     pub student_id: i32,
@@ -119,7 +117,7 @@ impl ToSQL for StudentAccount {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeacherAccount {
     pub id: i32,
     pub teacher_id: i32,
@@ -147,14 +145,14 @@ impl ToSQL for TeacherAccount {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Course {
     pub id: i32,
     pub teacher_id: i32,
     pub course: String,
     pub cr_cost: i32,
-    pub created_at: NaiveDate,
-    pub updated_at: NaiveDate,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl ToSQL for Course {
@@ -179,7 +177,7 @@ impl ToSQL for Course {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudentCourse {
     pub student_id: i32,
     pub course_id: i32,
@@ -209,7 +207,7 @@ impl ToSQL for StudentCourse {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Department {
     pub id: i32,
     pub dept_head: i32,

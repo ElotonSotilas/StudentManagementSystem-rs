@@ -19,13 +19,13 @@ pub struct Statistics {
     pub departments: i32,
 }
 
-pub struct Api {
+pub struct ServerConnection {
     db: DbDriver,
     session: Option<User>,
 }
 
 // Public methods
-impl Api {
+impl ServerConnection {
     pub fn new() -> Self {
         Self {
             db: DbDriver::init(),
@@ -67,7 +67,7 @@ impl Api {
         }
     }
 
-    pub fn get_user_by_filters(&self, filters: Vec<Filter>) -> Result<Vec<User>> {
+    pub fn get_users_by_filters(&self, filters: Vec<Filter>) -> Result<Vec<User>> {
         let finding = self.db.find(Table::Users, filters, None)?;
 
         let users = finding
@@ -89,17 +89,16 @@ impl Api {
             return Err(anyhow!("Must be signed out."));
         }
 
-        let username_regex = Regex::new(r"[a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?")?;
         let email_regex = Regex::new(
-            r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})",
+            r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@aubg.edu",
         )?;
         let phone_regex = Regex::new(r"^\+?([0-9]{2})\)?[-. ]?([0-9]{4})[-. ]?([0-9]{4})$")?;
         let password_regex =
             Regex::new(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$")?;
 
         if self
-            .get_user_by_filters(vec![Filter::Users(UsersFilter::Username(
-                user.username.to_lowercase().clone(),
+            .get_users_by_filters(vec![Filter::Users(UsersFilter::Email(
+                user.email.to_lowercase().clone(),
             ))])?
             .len()
             > 0
@@ -107,12 +106,12 @@ impl Api {
             return Err(anyhow!("User already exists."));
         }
 
-        if !username_regex.is_match(&user.username.to_lowercase()) {
-            return Err(anyhow!("Username must be alphanumeric."));
+        if user.username.is_empty() {
+            return Err(anyhow!("Account name cannot be empty."));
         }
 
         if !email_regex.is_match(&user.email) {
-            return Err(anyhow!("Invalid email address."));
+            return Err(anyhow!("Must be a valid AUBG email."));
         }
 
         if !phone_regex.is_match(&user.phone) {
@@ -131,9 +130,8 @@ impl Api {
         }
 
         let mut user = user.to_owned();
-        user.username = user.username.to_lowercase();
 
-        let salt = password::generate_salt(&user.username);
+        let salt = password::generate_salt(&user.email);
         user.password = password::hash(&user.password, salt);
 
         self.db.insert(vec![ReceiverType::User(user)])?;
@@ -143,7 +141,7 @@ impl Api {
 
     pub fn login(&mut self, username: String, password: String) -> Result<()> {
         let binding =
-            self.get_user_by_filters(vec![Filter::Users(UsersFilter::Username(username))])?;
+            self.get_users_by_filters(vec![Filter::Users(UsersFilter::Username(username))])?;
         let user = binding.get(0).ok_or_else(|| anyhow!("User not found."))?; // if none, user not found
 
         // If the user is suspended, they cannot login
@@ -354,92 +352,6 @@ impl Api {
         }
     }
 
-    pub fn register_student_courses(&mut self, student_courses: Vec<StudentCourse>) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "student" => {
-                    let errors = student_courses
-                        .iter()
-                        .filter_map(|x| {
-                            if x.student_id != session.id {
-                                Some(
-                                    anyhow!(
-                                        "You do not have permission to register courses on someone else's behalf."
-                                    )
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    if errors.len() > 0 {
-                        return Err(
-                            anyhow!(
-                                "You do not have permission to register courses on someone else's behalf. No action was taken."
-                            )
-                        );
-                    }
-
-                    let upcast = student_courses
-                        .iter()
-                        .map(|x| ReceiverType::StudentCourse(x.to_owned()))
-                        .collect();
-
-                    self.db.insert(upcast)?;
-
-                    Ok(())
-                }
-                _ => {
-                    Err(
-                        anyhow!(
-                            "You do not have permission to register courses, because you are not a student."
-                        )
-                    )
-                }
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
-    pub fn remove_student_courses(&mut self, student_courses: Vec<StudentCourse>) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "student" => {
-                    let errors = student_courses
-                        .iter()
-                        .filter_map(|x| {
-                            if x.student_id != session.id {
-                                Some(anyhow!("You do not have permission to remove this course."))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    if errors.len() > 0 {
-                        return Err(anyhow!(
-                            "Some courses to not belong to you. No action was taken."
-                        ));
-                    }
-
-                    let upcast = student_courses
-                        .iter()
-                        .map(|x| ReceiverType::StudentCourse(x.to_owned()))
-                        .collect();
-
-                    self.db.delete(upcast)?;
-
-                    Ok(())
-                }
-                _ => Err(anyhow!("You do not have permission to remove courses.")),
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
     pub fn search_users(&self, query: String) -> Result<Vec<User>> {
         let findings = self.db.find(
             Table::Users,
@@ -511,6 +423,30 @@ impl Api {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "student" => {
+                    let errors = courses
+                        .iter()
+                        .filter_map(|x| {
+                            let c = self.transmute_course_to_student_course(x.to_owned());
+                            if c.student_id != session.id {
+                                Some(
+                                    anyhow!(
+                                        "You do not have permission to register courses on someone else's behalf."
+                                    )
+                                )
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    if errors.len() > 0 {
+                        return Err(
+                            anyhow!(
+                                "You do not have permission to register courses on someone else's behalf. No action was taken."
+                            )
+                        );
+                    }
+
                     let upcast = courses
                         .iter()
                         .map(|x| {
@@ -531,13 +467,41 @@ impl Api {
         }
     }
 
-    pub fn drop_courses(&mut self, student_courses: Vec<StudentCourse>) -> Result<()> {
+    pub fn drop_courses(&mut self, courses: Vec<Course>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "student" => {
-                    let upcast = student_courses
+                    let errors = courses
                         .iter()
-                        .map(|x| ReceiverType::StudentCourse(x.to_owned()))
+                        .filter_map(|x| {
+                            let c = self.transmute_course_to_student_course(x.to_owned());
+                            if c.student_id != session.id {
+                                Some(
+                                    anyhow!(
+                                        "You do not have permission to register courses on someone else's behalf."
+                                    )
+                                )
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    if errors.len() > 0 {
+                        return Err(
+                            anyhow!(
+                                "You do not have permission to register courses on someone else's behalf. No action was taken."
+                            )
+                        );
+                    }
+
+                    let upcast = courses
+                        .iter()
+                        .map(|x| {
+                            ReceiverType::StudentCourse(
+                                self.transmute_course_to_student_course(x.to_owned()),
+                            )
+                        })
                         .collect();
 
                     self.db.delete(upcast)?;
@@ -639,21 +603,21 @@ impl Api {
     pub fn generate_statistics(&self) -> Result<Statistics> {
         let registered_users = self.get_users()?.len() as i32;
         let suspended_users = self
-            .get_user_by_filters(vec![Filter::Users(UsersFilter::Suspended(true))])?
+            .get_users_by_filters(vec![Filter::Users(UsersFilter::Suspended(true))])?
             .len() as i32;
         let faculty_members = self
-            .get_user_by_filters(vec![Filter::Users(UsersFilter::Role(
+            .get_users_by_filters(vec![Filter::Users(UsersFilter::Role(
                 "teacher".to_string(),
             ))])?
             .len() as i32;
         let active_students = self
-            .get_user_by_filters(vec![Filter::Users(UsersFilter::Role(
+            .get_users_by_filters(vec![Filter::Users(UsersFilter::Role(
                 "student".to_string(),
             ))])?
             .len() as i32
             - suspended_users;
         let graduated_students = self
-            .get_user_by_filters(vec![Filter::StudentAccount(StudentAccountFilter::CanGrad(
+            .get_users_by_filters(vec![Filter::StudentAccount(StudentAccountFilter::CanGrad(
                 true,
             ))])?
             .len() as i32;
@@ -677,7 +641,7 @@ impl Api {
 }
 
 // Private methods
-impl Api {
+impl ServerConnection {
     fn transmute_course_to_student_course(&self, course: Course) -> StudentCourse {
         StudentCourse {
             student_id: self.session.as_ref().unwrap().id,
@@ -833,7 +797,7 @@ impl Api {
 
     fn update_user_as_student(&mut self, user: User) -> Result<()> {
         let binding =
-            self.get_user_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
+            self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
 
         // Check permissions
@@ -869,7 +833,7 @@ impl Api {
 
     fn update_user_as_admin(&mut self, user: User) -> Result<()> {
         let binding =
-            self.get_user_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
+            self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
 
         // Check permissions

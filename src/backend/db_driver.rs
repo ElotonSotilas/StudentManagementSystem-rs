@@ -2,11 +2,9 @@
 
 use anyhow::Ok;
 use anyhow::Result;
-use chrono::NaiveDate;
 use rusqlite::types::ValueRef;
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use super::filter::*;
 use super::sqlite_conn::*;
@@ -442,8 +440,8 @@ impl DbDriver {
                 teacher_id,
                 course,
                 cr_cost,
-                created_at: NaiveDate::from_str(&created_at)?,
-                updated_at: NaiveDate::from_str(&updated_at)?,
+                created_at,
+                updated_at
             }))
         }
 
@@ -568,8 +566,8 @@ impl DbDriver {
                 password,
                 email,
                 phone,
-                created_at: NaiveDate::from_str(&created_at)?,
-                updated_at: NaiveDate::from_str(&updated_at)?,
+                created_at,
+                updated_at,
                 verified,
                 suspended,
                 forcenewpw,

@@ -6,15 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# Database and async runtime
+# Database and web server framework
 rusqlite = { version = "0.30.0", features = ["bundled"] }
-tokio = { version = "*", features = ["full"] }
+actix-web = "*"
+actix-rt = "*"
 
-# Iced for GUI
-iced = { version = "0.10", features = ["image", "svg", "wgpu"] }
-iced_aw = "*"
-iced-hex-color = "0.1.1"
-iced_style_config = "0.2"
+# Serde
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
 
 # Easier error handling
 anyhow = "*"
