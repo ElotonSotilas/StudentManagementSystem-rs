@@ -18,9 +18,9 @@ pub struct GenericResponse {
     pub message: String,
 }
 
-#[get("/api/health_checker")]
+#[get("/health_checker")]
 async fn health_checker() -> impl Responder {
-    const MESSAGE: &str = "Build Simple CRUD API with Rust and Actix Web";
+    const MESSAGE: &str = "Everything is functional";
     let response_json = &GenericResponse {
         status: "success".to_string(),
         message: MESSAGE.to_string(),
