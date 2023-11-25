@@ -494,21 +494,13 @@ pub async fn delete_user(req: HttpRequest) -> impl Responder {
         return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized."}));
     }
 
-    let id = match req.match_info().get("id").unwrap().parse::<i32>() {
-        Ok(i) => i,
-        Err(_) => return HttpResponse::BadRequest().json(json!({"error": "Invalid id."})),
-    };
-
-    match conn.get_user(id) {
-        Ok(u) => match conn.delete_user(user) {
-            Ok(_) => {
-                return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."}))
-            }
-            Err(e) => {
-                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-            }
-        },
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    match conn.delete_user(user) {
+        Ok(_) => {
+            return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
+        }
     }
 }
 
