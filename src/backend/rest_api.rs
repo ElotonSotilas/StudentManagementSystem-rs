@@ -1,4 +1,7 @@
-use actix_web::{get, HttpResponse, Responder};
+use actix_web::{
+    delete, get, patch, post,
+    HttpRequest, HttpResponse, Responder,
+};
 use serde_json::json;
 
 use crate::backend::table_models::User;
@@ -23,8 +26,7 @@ pub async fn users() -> impl Responder {
             let json = serde_json::to_string(&u);
             match json {
                 Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError()
-                    .json(json!({"error": e.to_string()})),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
         }
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
@@ -42,13 +44,10 @@ pub async fn students() -> impl Responder {
             let json = serde_json::to_string(&s);
             match json {
                 Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError()
-                    .json(json!({"error": e.to_string()})),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
         }
-        Err(e) => {
-            HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -63,13 +62,10 @@ pub async fn teachers() -> impl Responder {
             let json = serde_json::to_string(&t);
             match json {
                 Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError()
-                    .json(json!({"error": e.to_string()})),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
         }
-        Err(e) => {
-            HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -82,18 +78,224 @@ pub async fn courses() -> impl Responder {
             let json = serde_json::to_string(&c);
             match json {
                 Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError()
-                    .json(json!({"error": e.to_string()})),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
         }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[get("/courses/{id}")]
+pub async fn get_course(req: HttpRequest) -> impl Responder {
+    let conn = ServerConnection::new();
+    let id = req.match_info().get("id").unwrap_or_else(|| "0");
+
+    if id == "0" {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing course id."}));
+    }
+
+    let course_list = conn.search_courses(id.to_string());
+
+    match course_list {
+        Ok(c) => {
+            let json = serde_json::to_string(&c);
+            match json {
+                Ok(j) => HttpResponse::Ok().body(j),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+            }
+        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[post("/courses")]
+pub async fn new_course(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let name = request_headers.get("name");
+    let description = request_headers.get("description");
+    let course_nr = request_headers.get("course_nr");
+    let teacher_id = request_headers.get("id");
+    let cr_cost = request_headers.get("cr_cost");
+    let timeslots = request_headers.get("timeslots");
+
+    if name.is_none()
+        || teacher_id.is_none()
+        || course_nr.is_none()
+        || cr_cost.is_none()
+        || timeslots.is_none()
+    {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing required data."}));
+    }
+
+    let name = name.unwrap().to_str().unwrap();
+    let description = description
+        .unwrap()
+        .to_str()
+        .unwrap_or("No description.")
+        .to_string();
+    let course_nr = course_nr.unwrap().to_str().unwrap().to_string();
+    let teacher_id = teacher_id
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap_or(0);
+    let cr_cost = cr_cost
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap_or(0);
+    let timeslots = timeslots.unwrap().to_str().unwrap().to_string();
+
+    if teacher_id == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Invalid teacher id."}));
+    }
+
+    if cr_cost == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Invalid course cost."}));
+    }
+
+    let course = Course {
+        id: 0, // This will be set by the database.
+        description,
+        teacher_id,
+        course: name.to_string(),
+        course_nr,
+        cr_cost,
+        timeslots,
+    };
+
+    match conn.register_courses(vec![course]) {
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully registered course."})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[delete("/courses/{id}")]
+pub async fn remove_course(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let id = req.match_info().get("id").unwrap();
+
+    let requestee = request_headers.get("id");
+
+    if requestee.is_none() {
+        return HttpResponse::BadRequest().json(json!({"error": "Not logged in."}));
+    }
+
+    let requestee = requestee.unwrap().to_str().unwrap();
+    let find_course = conn.search_courses(id.to_string());
+
+    match find_course {
+        Ok(c) => {
+            if c.len() == 0 {
+                return HttpResponse::BadRequest().json(json!({"error": "Course not found."}));
+            }
+
+            if c.len() > 1 {
+                return HttpResponse::InternalServerError()
+                    .json(json!({"error": "Multiple courses found."}));
+            }
+
+            if c.get(0).unwrap().0.teacher_id != requestee.parse::<i32>().unwrap() {
+                return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
+            }
+
+            let course = c.get(0).unwrap().0.clone();
+
+            match conn.remove_courses(vec![course]) {
+                Ok(_) => {
+                    HttpResponse::Ok().json(json!({"message": "Successfully removed course."}))
+                }
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+            }
+        }
+
         Err(e) => {
-            HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    }
+}
+
+#[patch("/courses/{id}")]
+pub async fn update_course(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let name = request_headers.get("name");
+    let description = request_headers.get("description");
+    let course_nr = request_headers.get("course_nr");
+    let teacher_id = request_headers.get("id");
+    let cr_cost = request_headers.get("cr_cost");
+    let timeslots = request_headers.get("timeslots");
+
+    let id = req.match_info().get("id").unwrap();
+
+    if teacher_id.is_none()
+        || cr_cost.is_none()
+        || timeslots.is_none()
+        || name.is_none()
+        || course_nr.is_none()
+    {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing data."}));
+    }
+
+    let teacher_id = teacher_id.unwrap().to_str().unwrap();
+    let cr_cost = cr_cost.unwrap().to_str().unwrap();
+    let timeslots = timeslots.unwrap().to_str().unwrap();
+    let name = name.unwrap().to_str().unwrap();
+    let course_nr = course_nr.unwrap().to_str().unwrap().to_string();
+    let description = description
+        .unwrap()
+        .to_str()
+        .unwrap_or("No description.")
+        .to_string();
+
+    let find_course = conn.search_courses(id.to_string());
+
+    match find_course {
+        Ok(c) => {
+            if c.len() == 0 {
+                return HttpResponse::BadRequest().json(json!({"error": "Course not found."}));
+            }
+
+            if c.len() > 1 {
+                return HttpResponse::InternalServerError()
+                    .json(json!({"error": "Multiple courses found."}));
+            }
+
+            if c.get(0).unwrap().0.teacher_id != teacher_id.parse::<i32>().unwrap() {
+                return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
+            }
+
+            let mut course = c.get(0).unwrap().0.clone();
+
+            course.course = name.to_string();
+            course.description = description;
+            course.course_nr = course_nr;
+            course.cr_cost = cr_cost.parse::<i32>().unwrap();
+            course.timeslots = timeslots.to_string();
+
+            match conn.remove_courses(vec![course]) {
+                Ok(_) => {
+                    HttpResponse::Ok().json(json!({"message": "Successfully removed course."}))
+                }
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+            }
+        }
+
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
         }
     }
 }
 
 #[get("/admin")]
-pub async fn admin(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn admin(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
@@ -139,9 +341,7 @@ pub async fn admin(req: actix_web::HttpRequest) -> impl Responder {
                 }
             }
         }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -162,17 +362,15 @@ pub async fn enroll(req: actix_web::HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing course id"}));
     }
 
-    let username = email
+    let email = email
         .unwrap()
         .to_str()
         .unwrap()
-        .split("@")
-        .take(1)
-        .collect::<String>();
+        .to_string();
     let password = password.unwrap().to_str().unwrap().to_owned();
     let course_id = course_id.unwrap().to_owned();
 
-    let user = conn.search_users(format!("{}", username));
+    let user = conn.search_users(format!("{}", email));
 
     match user {
         Ok(u) => {
@@ -181,7 +379,7 @@ pub async fn enroll(req: actix_web::HttpRequest) -> impl Responder {
             } else {
                 let user = u.get(0).unwrap();
 
-                match conn.login(username, password) {
+                match conn.login(email, password) {
                     Ok(_) => {
                         match conn.enroll_courses(
                             conn.search_courses(format!("{}", course_id))
@@ -214,9 +412,7 @@ pub async fn enroll(req: actix_web::HttpRequest) -> impl Responder {
                 }
             }
         }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -237,17 +433,11 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing course id"}));
     }
 
-    let username = email
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .split("@")
-        .take(1)
-        .collect::<String>();
+    let email = email.unwrap().to_str().unwrap().to_string();
     let password = password.unwrap().to_str().unwrap().to_owned();
     let course_id = course_id.unwrap().to_owned();
 
-    let user = conn.search_users(format!("{}", username));
+    let user = conn.search_users(format!("{}", email));
 
     match user {
         Ok(u) => {
@@ -256,7 +446,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
             } else {
                 let user = u.get(0).unwrap();
 
-                match conn.login(username, password) {
+                match conn.login(email, password) {
                     Ok(_) => {
                         let course_list = conn
                             .search_courses(format!("{}", course_id))
@@ -290,9 +480,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
                 }
             }
         }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -338,9 +526,7 @@ pub async fn login(req: actix_web::HttpRequest) -> impl Responder {
                 }
             }
         }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
