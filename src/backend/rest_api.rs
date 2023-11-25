@@ -499,13 +499,12 @@ pub async fn delete_user(req: HttpRequest) -> impl Responder {
     };
 
     match conn.get_user(id) {
-        Ok(u) => {
-            match conn.delete_user(user) {
-                Ok(_) => return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."})),
-                Err(e) => {
-                    return HttpResponse::InternalServerError()
-                        .json(json!({"error": e.to_string()}))
-                }
+        Ok(u) => match conn.delete_user(user) {
+            Ok(_) => {
+                return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."}))
+            }
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
             }
         },
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
@@ -653,63 +652,32 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
 
     login!(user, email, password, conn);
 
-    let course_id = req.match_info().get("id");
+    let course_id = match req.match_info().get("id") {
+        Some(id) => id,
+        None => {
+            return HttpResponse::BadRequest().json(json!({"error": "Missing course id"}));
+        }
+    };
 
-    if email.is_none() || password.is_none() {
-        return HttpResponse::BadRequest().json(json!({"error": "Missing email or password"}));
-    }
+    let course_list = conn
+        .search_courses(format!("{}", course_id))
+        .unwrap()
+        .iter()
+        .filter_map(|c| Some(c.0.clone()))
+        .collect::<Vec<Course>>();
 
-    if course_id.is_none() {
-        return HttpResponse::BadRequest().json(json!({"error": "Missing course id"}));
-    }
-
-    let email = email.unwrap().to_str().unwrap().to_string();
-    let password = password.unwrap().to_str().unwrap().to_owned();
-    let course_id = course_id.unwrap().to_owned();
-
-    let user = conn.search_users(format!("{}", email));
-
-    match user {
-        Ok(u) => {
-            if u.len() == 0 {
-                return HttpResponse::BadRequest().json(json!({"error": "User not found"}));
-            } else {
-                let user = u.get(0).unwrap();
-
-                match conn.login(email, password) {
-                    Ok(_) => {
-                        let course_list = conn
-                            .search_courses(format!("{}", course_id))
-                            .unwrap()
-                            .iter()
-                            .filter_map(|c| Some(c.0.clone()))
-                            .collect::<Vec<Course>>();
-
-                        match conn.drop_courses(course_list) {
-                            Ok(_) => {
-                                let json = serde_json::to_string(&user);
-                                match json {
-                                    Ok(j) => return HttpResponse::Ok().body(j),
-                                    Err(_) => {
-                                        return HttpResponse::InternalServerError()
-                                            .json(json!({"error": "Failed to serialize user"}))
-                                    }
-                                }
-                            }
-
-                            Err(e) => {
-                                return HttpResponse::InternalServerError()
-                                    .json(json!({"error": e.to_string()}))
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        return HttpResponse::InternalServerError()
-                            .json(json!({"error": e.to_string()}))
-                    }
+    match conn.drop_courses(course_list) {
+        Ok(_) => {
+            let json = serde_json::to_string(&user);
+            match json {
+                Ok(j) => return HttpResponse::Ok().body(j),
+                Err(_) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": "Failed to serialize user"}))
                 }
             }
         }
+
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
