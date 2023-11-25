@@ -113,9 +113,13 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-    let mut user;
 
-    login!(user, login_email, login_password, conn);
+    login!(login_email, login_password, conn);
+
+    let user = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
 
     let name = request_headers.get("name");
     let description = request_headers.get("description");
@@ -187,9 +191,8 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-    let mut user;
 
-    login!(user, login_email, login_password, conn);
+    login!(login_email, login_password, conn);
 
     let find_course = conn.search_courses(id.to_string());
     let requestee = conn
@@ -262,6 +265,20 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
         .unwrap_or("No description.")
         .to_string();
 
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+
+    login!(login_email, login_password, conn);
+
+    let requestee = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .id;
+
+    if requestee != teacher_id.parse::<i32>().unwrap() {
+        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
+    }
+
     let find_course = conn.search_courses(id.to_string());
 
     match find_course {
@@ -287,7 +304,7 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
             course.cr_cost = cr_cost.parse::<i32>().unwrap();
             course.timeslots = timeslots.to_string();
 
-            match conn.remove_courses(vec![course]) {
+            match conn.update_courses(vec![course]) {
                 Ok(_) => {
                     HttpResponse::Ok().json(json!({"message": "Successfully removed course."}))
                 }
@@ -306,50 +323,21 @@ pub async fn admin(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
-    let username = request_headers.get("username");
-    let password = request_headers.get("password");
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
 
-    if username.is_none() || password.is_none() {
-        return HttpResponse::BadRequest().json(json!({"error": "Missing username or password"}));
+    login!(login_email, login_password, conn);
+
+    let user = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
+
+    if user.role != "admin" {
+        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized"}));
     }
 
-    let username = username.unwrap().to_str().unwrap();
-    let password = password.unwrap().to_str().unwrap();
-
-    let user = conn.search_users(format!("{}", username));
-
-    match user {
-        Ok(u) => {
-            if u.len() == 0 {
-                return HttpResponse::BadRequest().json(json!({"error": "User not found"}));
-            } else {
-                let user = u.get(0).unwrap();
-
-                if user.role != "admin" {
-                    return HttpResponse::BadRequest()
-                        .json(json!({"error": "User is not an admin"}));
-                }
-
-                match conn.login(username.to_owned(), password.to_owned()) {
-                    Ok(_) => {
-                        let json = serde_json::to_string(&user);
-                        match json {
-                            Ok(j) => return HttpResponse::Ok().body(j),
-                            Err(e) => {
-                                return HttpResponse::InternalServerError()
-                                    .json(json!({"error": e.to_string()}))
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        return HttpResponse::InternalServerError()
-                            .json(json!({"error": e.to_string()}))
-                    }
-                }
-            }
-        }
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
-    }
+    return HttpResponse::Ok().json(json!({"message": "Success"}));
 }
 
 #[patch("/admin/users/{id}")]
@@ -359,9 +347,13 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-    let user;
 
-    login!(user, login_email, login_password, conn);
+    login!(login_email, login_password, conn);
+
+    let user = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
 
     if user.role != "admin" {
         return HttpResponse::BadRequest().json(json!({"error": "Unauthorized"}));
@@ -485,9 +477,18 @@ pub async fn delete_user(req: HttpRequest) -> impl Responder {
 
     let login_email = req.headers().get("login_email");
     let login_password = req.headers().get("login_password");
-    let user;
 
-    login!(user, login_email, login_password, conn);
+    let id = match req.match_info().get("id") {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().json(json!({"error": "Invalid id."})),
+    };
+
+    login!(login_email, login_password, conn);
+
+    let user = conn
+        .search_users(format!("{}", id))
+        .unwrap()[0]
+        .clone();
 
     if user.role != "admin" {
         return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized."}));
@@ -518,9 +519,13 @@ pub async fn delete_self(req: HttpRequest) -> impl Responder {
 
     let email = request_headers.get("login_email");
     let password = request_headers.get("login_password");
-    let user;
 
-    login!(user, email, password, conn);
+    login!(email, password, conn);
+
+    let user = conn
+        .search_users(format!("{}", email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
 
     match conn.delete_user(user) {
         Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully deleted user."})),
@@ -535,9 +540,13 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-    let mut user;
 
-    login!(user, login_email, login_password, conn);
+    login!(login_email, login_password, conn);
+
+    let mut user = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
 
     let username = request_headers.get("username");
     let email = request_headers.get("email");
@@ -600,16 +609,20 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
     }
 }
 
-#[get("/enroll/{id}")]
+#[post("/enroll/{id}")]
 pub async fn enroll(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-    let user;
 
-    login!(user, login_email, login_password, conn);
+    login!(login_email, login_password, conn);
+
+    let user = conn
+        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .clone();
 
     let course_id = req.match_info().get("id");
 
@@ -641,16 +654,20 @@ pub async fn enroll(req: HttpRequest) -> impl Responder {
     }
 }
 
-#[get("/unenroll/{id}")]
+#[post("/unenroll/{id}")]
 pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
     let email = request_headers.get("login_email");
     let password = request_headers.get("login_password");
-    let user;
 
-    login!(user, email, password, conn);
+    login!(email, password, conn);
+
+    let user = conn
+        .search_users(format!("{}", email.unwrap().to_str().unwrap()))
+        .unwrap()[0]
+        .to_owned();
 
     let course_id = match req.match_info().get("id") {
         Some(id) => id,
@@ -682,7 +699,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
     }
 }
 
-#[get("/login")]
+#[post("/login")]
 pub async fn login(req: actix_web::HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
@@ -742,7 +759,7 @@ pub async fn logout(req: actix_web::HttpRequest) -> impl Responder {
     }
 }
 
-#[get("/register")]
+#[post("/register")]
 pub async fn register(req: actix_web::HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
@@ -784,7 +801,7 @@ pub async fn register(req: actix_web::HttpRequest) -> impl Responder {
     }
 }
 
-#[get("/admin/register")]
+#[post("/admin/register")]
 pub async fn register_admin(req: actix_web::HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
@@ -838,7 +855,7 @@ pub async fn register_admin(req: actix_web::HttpRequest) -> impl Responder {
 // So that I don't have to repeat myself over and over again
 #[macro_export]
 macro_rules! login_macro {
-    ($usr:ident, $login_email:expr, $login_password:expr, $conn:expr) => {
+    ($login_email:expr, $login_password:expr, $conn:expr) => {
         {
             match ($login_email, $login_password) {
                 (_, None) => {
@@ -848,26 +865,12 @@ macro_rules! login_macro {
                     return HttpResponse::BadRequest().json(json!({"error": "Missing login password."}));
                 },
                 (Some(a), Some(b)) => {
-                    let password_from_server = match $conn.search_users(format!("{}", a.to_str().unwrap())) {
-                        Ok(u) => {
-                            if u.len() == 0 {
-                                return HttpResponse::BadRequest().json(json!({"error": "User not found."}));
-                            }
+                    let username = a.to_str().unwrap().to_owned();
+                    let password = b.to_str().unwrap().to_owned();
 
-                            if u.len() > 1 {
-                                return HttpResponse::InternalServerError()
-                                    .json(json!({"error": "Multiple users found."}));
-                            }
-
-                            $usr = u.get(0).unwrap().to_owned();
-
-                            $usr.password.to_owned()
-                        },
-                        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
-                    };
-                    match password::verify(&password_from_server, b.to_str().unwrap()) {
-                        true => {},
-                        false => {
+                    match $conn.login(username, password) {
+                        Ok(_) => {},
+                        Err(_) => {
                             return HttpResponse::BadRequest().json(json!({"error": "Invalid login password."}));
                         }
                     }
