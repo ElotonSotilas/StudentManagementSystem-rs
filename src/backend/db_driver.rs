@@ -2,7 +2,6 @@
 
 use anyhow::Ok;
 use anyhow::Result;
-use chrono::format;
 use rusqlite::types::ValueRef;
 use std::cell::Cell;
 use std::collections::HashMap;

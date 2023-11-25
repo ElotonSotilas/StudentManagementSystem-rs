@@ -510,12 +510,12 @@ impl ServerConnection {
         }
     }
 
-    pub fn promote_to_teacher(&mut self, user: User) -> Result<()> {
+    pub fn set_user_role(&mut self, user: User, role: &str) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "admin" => {
                     let mut updated = user.to_owned();
-                    updated.role = "teacher".to_string();
+                    updated.role = role.to_string();
                     let upcast = ReceiverType::User(updated);
 
                     self.db.update(vec![upcast])?;
@@ -528,27 +528,6 @@ impl ServerConnection {
                         "You do not have permission to promote users to teachers."
                     ))
                 }
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
-    pub fn demote_from_teacher(&mut self, user: User) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "admin" => {
-                    let mut updated = user.to_owned();
-                    updated.role = "student".to_string();
-                    let upcast = ReceiverType::User(updated);
-
-                    self.db.update(vec![upcast])?;
-                    Ok(())
-                }
-
-                _ => Err(anyhow!(
-                    "You do not have permission to demote users from teachers."
-                )),
             }
         } else {
             Err(anyhow!("Must be signed in."))
