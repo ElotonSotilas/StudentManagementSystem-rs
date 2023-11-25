@@ -903,7 +903,7 @@ pub async fn register_admin(req: actix_web::HttpRequest) -> impl Responder {
 
     if username.is_none() || password.is_none() || email.is_none() {
         return HttpResponse::BadRequest()
-            .json(json!({"error": "Missing username, password, email, or role"}));
+            .json(json!({"error": "Missing username, password or email."}));
     }
 
     let username = username.unwrap().to_str().unwrap().to_owned();

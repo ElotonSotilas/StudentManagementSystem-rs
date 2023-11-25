@@ -18,12 +18,17 @@ async fn main() -> std::io::Result<()> {
             .service(new_course)
             .service(update_course)
             .service(remove_course)
+            .service(update_user)
+            .service(delete_user)
+            .service(update_self)
+            .service(delete_self)
             .service(admin)
             .service(enroll)
             .service(unenroll)
             .service(login)
             .service(logout)
             .service(register)
+            .service(register_admin)
     })
     .bind(("127.0.0.1", 8080))?;
 
