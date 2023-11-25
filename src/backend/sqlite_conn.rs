@@ -13,7 +13,7 @@ impl DatabaseConnection {
     }
 
     pub fn create_tables(&mut self) -> Result<&mut Self> {
-            self.connection.execute_batch(
+        self.connection.execute_batch(
                 r#"
             BEGIN;
             CREATE TABLE IF NOT EXISTS "USERS" (
@@ -82,10 +82,78 @@ impl DatabaseConnection {
                 FOREIGN KEY ("dept_head") REFERENCES "TEACHER_ACCOUNT"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
+
+            CREATE TRIGGER IF NOT EXISTS "manage_student_account"
+            AFTER INSERT ON "USERS"
+            FOR EACH ROW
+            WHEN NEW."role" = 'student'
+            BEGIN
+                INSERT OR REPLACE INTO "STUDENT_ACCOUNT" ("student_id", "advisor_id", "discipline", 
+                "enrollment", "cgpa", "cur_credit", "cum_credit")
+                VALUES (NEW.id, NULL, '', '', 0.0, 0, 0);
+                
+                DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "manage_teacher_account"
+            AFTER INSERT ON "USERS"
+            FOR EACH ROW
+            WHEN NEW."role" = 'teacher'
+            BEGIN
+                INSERT OR REPLACE INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id", "dept")
+                VALUES (NEW."id", 0, '');
+                
+                DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = NEW."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "clear_accounts_on_delete"
+            AFTER DELETE ON "USERS"
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = OLD."id";
+                DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = OLD."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "handle_admin_role"
+            AFTER INSERT ON USERS
+            FOR EACH ROW
+            WHEN NEW."role" = 'admin'
+            BEGIN
+                DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = NEW."id";
+                DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "update_student_cgpa"
+            AFTER INSERT ON "STUDENT_COURSES"
+            FOR EACH ROW
+            BEGIN
+                UPDATE "STUDENT_ACCOUNT"
+                SET "cgpa" = (
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                    FROM "STUDENT_COURSES"
+                    JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = "COURSES"."id"
+                    WHERE "STUDENT_COURSES"."student_id" = NEW."student_id"
+                )
+                WHERE "id" = NEW."student_id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "update_student_cgpa_delete"
+            AFTER DELETE ON "STUDENT_COURSES"
+            FOR EACH ROW
+            BEGIN
+                UPDATE "STUDENT_ACCOUNT"
+                SET "cgpa" = (
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                    FROM "STUDENT_COURSES"
+                    JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = COURSES."id"
+                    WHERE "STUDENT_COURSES"."student_id" = OLD."student_id"
+                )
+                WHERE id = OLD."student_id";
+            END;
             COMMIT;
             "#,
             )?;
 
         Ok(self)
-    } 
+    }
 }

@@ -10,6 +10,7 @@ edition = "2021"
 rusqlite = { version = "0.30.0", features = ["bundled"] }
 actix-web = "*"
 actix-rt = "*"
+actix-cors = "*"
 
 # Serde
 serde = "*"
