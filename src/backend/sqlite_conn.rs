@@ -36,7 +36,7 @@ impl DatabaseConnection {
                 "discipline" TEXT NOT NULL,
                 "enrollment" TEXT NOT NULL,
                 "cgpa" REAL NOT NULL,
-                "can_grad" BOOLEAN NOT NULL CHECK ("cgpa" > 2.0 AND "cum_credit" >= 120),
+                "can_grad" BOOLEAN NOT NULL,
                 "cur_credit" INTEGER NOT NULL,
                 "cum_credit" INTEGER NOT NULL,
                 FOREIGN KEY ("student_id") REFERENCES "USERS"("id"),
@@ -45,8 +45,8 @@ impl DatabaseConnection {
             );
             
             CREATE TABLE IF NOT EXISTS "TEACHER_ACCOUNT" (
-                "id" INTEGER NOT NULL,
-                "teacher_id" INTEGER NOT NULL,
+                "id" INTEGER NOT NULL UNIQUE,
+                "teacher_id" INTEGER NOT NULL UNIQUE,
                 "dept_id" INTEGER NOT NULL,
                 "dept" TEXT NOT NULL,
                 FOREIGN KEY ("teacher_id") REFERENCES "USERS"("id"),
@@ -55,7 +55,7 @@ impl DatabaseConnection {
             );
             
             CREATE TABLE IF NOT EXISTS "COURSES" (
-                "id" INTEGER NOT NULL,
+                "id" INTEGER NOT NULL UNIQUE,
                 "teacher_id" INTEGER NOT NULL,
                 "course" TEXT NOT NULL,
                 "course_nr" TEXT NOT NULL,
@@ -89,9 +89,8 @@ impl DatabaseConnection {
             WHEN NEW."role" = 'student'
             BEGIN
                 INSERT OR REPLACE INTO "STUDENT_ACCOUNT" ("student_id", "advisor_id", "discipline", 
-                "enrollment", "cgpa", "cur_credit", "cum_credit")
-                VALUES (NEW.id, NULL, '', '', 0.0, 0, 0);
-                
+                "enrollment", "can_grad", "cgpa", "cur_credit", "cum_credit")
+                VALUES (NEW.id, NULL, '', '', FALSE, 0.0, 0, 0);
                 DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
             END;
 
@@ -102,7 +101,6 @@ impl DatabaseConnection {
             BEGIN
                 INSERT OR REPLACE INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id", "dept")
                 VALUES (NEW."id", 0, '');
-                
                 DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = NEW."id";
             END;
 
@@ -123,7 +121,7 @@ impl DatabaseConnection {
                 DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
             END;
 
-            CREATE TRIGGER IF NOT EXISTS "update_student_cgpa"
+            CREATE TRIGGER IF NOT EXISTS "update_student_cgpa_insert"
             AFTER INSERT ON "STUDENT_COURSES"
             FOR EACH ROW
             BEGIN
@@ -133,7 +131,29 @@ impl DatabaseConnection {
                     FROM "STUDENT_COURSES"
                     JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = "COURSES"."id"
                     WHERE "STUDENT_COURSES"."student_id" = NEW."student_id"
-                )
+                ),
+                "can_grad" = CASE
+                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id") >= 120 THEN 1
+                    ELSE 0
+                END
+                WHERE "id" = NEW."student_id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "update_student_cgpa_update"
+            AFTER UPDATE ON "STUDENT_COURSES"
+            FOR EACH ROW
+            BEGIN
+                UPDATE "STUDENT_ACCOUNT"
+                SET "cgpa" = (
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                    FROM "STUDENT_COURSES"
+                    JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = "COURSES"."id"
+                    WHERE "STUDENT_COURSES"."student_id" = NEW."student_id"
+                ),
+                "can_grad" = CASE
+                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id") >= 120 THEN 1
+                    ELSE 0
+                END
                 WHERE "id" = NEW."student_id";
             END;
 
@@ -147,7 +167,11 @@ impl DatabaseConnection {
                     FROM "STUDENT_COURSES"
                     JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = COURSES."id"
                     WHERE "STUDENT_COURSES"."student_id" = OLD."student_id"
-                )
+                ),
+                "can_grad" = CASE
+                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = OLD."student_id") >= 120 THEN 1
+                    ELSE 0
+                END
                 WHERE id = OLD."student_id";
             END;
             COMMIT;

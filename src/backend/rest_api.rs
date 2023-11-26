@@ -96,11 +96,46 @@ pub async fn get_course(req: HttpRequest) -> impl Responder {
 
     match course_list {
         Ok(c) => {
-            let json = serde_json::to_string(&c);
-            match json {
-                Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
-            }
+            println!("{:?}", c);
+            // let mut json = Vec::new();
+            // for (c, t, d, u) in c {
+            //     let json1 = match serde_json::to_string(&c) {
+            //         Ok(j) => j,
+            //         Err(e) => {
+            //             return HttpResponse::InternalServerError()
+            //                 .json(json!({"error": e.to_string()}))
+            //         }
+            //     };
+            //     let json2 = match serde_json::to_string(&t) {
+            //         Ok(j) => j,
+            //         Err(e) => {
+            //             return HttpResponse::InternalServerError()
+            //                 .json(json!({"error": e.to_string()}))
+            //         }
+            //     };
+            //     let json3 = match serde_json::to_string(&d) {
+            //         Ok(j) => j,
+            //         Err(e) => {
+            //             return HttpResponse::InternalServerError()
+            //                 .json(json!({"error": e.to_string()}))
+            //         }
+            //     };
+            //     let json4 = match serde_json::to_string(&u) {
+            //         Ok(j) => j,
+            //         Err(e) => {
+            //             return HttpResponse::InternalServerError()
+            //                 .json(json!({"error": e.to_string()}))
+            //         }
+            //     };
+
+            //     let sum = format!("{},{},{},{}", json1, json2, json3, json4);
+
+            //     json.push(sum);
+            // }
+
+            let j = serde_json::to_string(&c).unwrap();
+
+            HttpResponse::Ok().body(j)
         }
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
@@ -120,6 +155,10 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
         .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
         .unwrap()[0]
         .to_owned();
+
+    if user.role != "teacher" && user.role != "admin" {
+        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
+    }
 
     let name = request_headers.get("name");
     let description = request_headers.get("description");
@@ -211,11 +250,11 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
                     .json(json!({"error": "Multiple courses found."}));
             }
 
-            if c.get(0).unwrap().0.teacher_id != requestee {
+            if c.get(0).unwrap().teacher_id != requestee {
                 return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
             }
 
-            let course = c.get(0).unwrap().0.clone();
+            let course = c.get(0).unwrap().clone();
 
             match conn.remove_courses(vec![course]) {
                 Ok(_) => {
@@ -272,10 +311,9 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
 
     let requestee = conn
         .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .id;
+        .unwrap()[0].clone();
 
-    if requestee != teacher_id.parse::<i32>().unwrap() {
+    if requestee.id != teacher_id.parse::<i32>().unwrap() && requestee.role != "admin" {
         return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
     }
 
@@ -292,11 +330,11 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
                     .json(json!({"error": "Multiple courses found."}));
             }
 
-            if c.get(0).unwrap().0.teacher_id != teacher_id.parse::<i32>().unwrap() {
+            if c.get(0).unwrap().teacher_id != teacher_id.parse::<i32>().unwrap() {
                 return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
             }
 
-            let mut course = c.get(0).unwrap().0.clone();
+            let mut course = c.get(0).unwrap().clone();
 
             course.course = name.to_string();
             course.description = description;
@@ -306,7 +344,7 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
 
             match conn.update_courses(vec![course]) {
                 Ok(_) => {
-                    HttpResponse::Ok().json(json!({"message": "Successfully removed course."}))
+                    HttpResponse::Ok().json(json!({"message": "Successfully updated course."}))
                 }
                 Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
@@ -485,22 +523,15 @@ pub async fn delete_user(req: HttpRequest) -> impl Responder {
 
     login!(login_email, login_password, conn);
 
-    let user = conn
-        .search_users(format!("{}", id))
-        .unwrap()[0]
-        .clone();
+    let user = conn.search_users(format!("{}", id)).unwrap()[0].clone();
 
     if user.role != "admin" {
         return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized."}));
     }
 
     match conn.delete_user(user) {
-        Ok(_) => {
-            return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."}))
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Ok(_) => return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."})),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -628,7 +659,7 @@ pub async fn enroll(req: HttpRequest) -> impl Responder {
         conn.search_courses(format!("{}", course_id))
             .unwrap()
             .iter()
-            .filter_map(|c| Some(c.0.clone()))
+            .filter_map(|c| Some(c.clone()))
             .collect(),
     ) {
         Ok(_) => {
@@ -672,7 +703,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
         .search_courses(format!("{}", course_id))
         .unwrap()
         .iter()
-        .filter_map(|c| Some(c.0.clone()))
+        .filter_map(|c| Some(c.clone()))
         .collect::<Vec<Course>>();
 
     match conn.drop_courses(course_list) {
@@ -687,7 +718,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
             }
         }
 
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 

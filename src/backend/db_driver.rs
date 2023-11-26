@@ -17,6 +17,7 @@ pub enum Join {
     Full,
 }
 
+#[derive(Debug)]
 pub enum ReceiverType {
     User(User),
     StudentAccount(StudentAccount),
@@ -357,7 +358,6 @@ impl DbDriver {
         );
 
         let mut stmt = self.c.connection.prepare(&sql)?;
-
         let mut rows = stmt.query([])?;
         let mut departments = Vec::new();
 
@@ -415,15 +415,18 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: &Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM COURSES WHERE {}",
-            conditions.join(&separator)
-        );
+        let sql = if filters.is_empty() {
+            format!("SELECT * FROM COURSES")
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM COURSES WHERE {}",
+                conditions.join(&separator)
+            )
+        };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
-
         let mut rows = stmt.query([])?;
         let mut courses = Vec::new();
 
@@ -432,7 +435,7 @@ impl DbDriver {
             let teacher_id: i32 = row.get(1)?;
             let course: String = row.get(2)?;
             let course_nr: String = row.get(3)?;
-            let description = row.get(4)?;
+            let description: String = row.get(4)?;
             let cr_cost: i32 = row.get(5)?;
             let timeslots: String = row.get(6)?;
 
@@ -443,7 +446,7 @@ impl DbDriver {
                 course_nr,
                 description,
                 cr_cost,
-                timeslots
+                timeslots,
             }))
         }
 
@@ -493,12 +496,16 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: &Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM STUDENT_ACCOUNT WHERE {}",
-            conditions.join(&separator)
-        );
+        let sql = if filters.is_empty() {
+            "SELECT * FROM STUDENT_ACCOUNT".to_owned()
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM STUDENT_ACCOUNT WHERE {}",
+                conditions.join(&separator)
+            )
+        };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
 
@@ -542,14 +549,10 @@ impl DbDriver {
         } else {
             let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
             let separator = join_mode.to_string();
-            format!(
-                "SELECT * FROM USERS WHERE {}",
-                conditions.join(&separator)
-            )
+            format!("SELECT * FROM USERS WHERE {}", conditions.join(&separator))
         };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
-
         let mut rows = stmt.query([])?;
         let mut users = Vec::new();
 

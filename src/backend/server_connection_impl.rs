@@ -6,6 +6,7 @@ use super::table_models::*;
 use anyhow::anyhow;
 use anyhow::Ok;
 use anyhow::Result;
+use argon2::password_hash::Ident;
 use chrono::Datelike;
 use regex::Regex;
 
@@ -377,41 +378,48 @@ impl ServerConnection {
     pub fn search_courses(
         &self,
         query: String,
-    ) -> Result<Vec<(Course, TeacherAccount, Department, User)>> {
-        let course_query = self.db.find(
-            Table::Courses,
-            vec![Filter::Courses(CoursesFilter::All)],
-            Some(Associativity::Or),
-        )?;
-        let teachers_query = self.db.find(
-            Table::TeacherAccount,
-            vec![Filter::TeacherAccount(TeacherAccountFilter::All)],
-            Some(Associativity::Or),
-        )?;
-        let department_query = self.db.find(
-            Table::Departments,
-            vec![Filter::Departments(DepartmentsFilter::All)],
-            Some(Associativity::Or),
-        )?;
-        let users_query = self.db.find(
-            Table::Users,
-            vec![Filter::Users(UsersFilter::All)],
-            Some(Associativity::Or),
-        )?;
+    ) -> Result<Vec<Course>> {
+        let course_query = self.db.find(Table::Courses, vec![], None)?;
+        let teachers_query = self.db.find(Table::TeacherAccount, vec![], None)?;
+        let department_query = self.db.find(Table::Departments, vec![], None)?;
+        let users_query = self.db.find(Table::Users, vec![], None)?;
 
         let query = query.trim().to_lowercase(); // trim and convert to lowercase
-        let mut joined_data = Vec::new();
 
-        self.join_courses_with_data(
-            course_query,
-            teachers_query,
-            department_query,
-            users_query,
-            query,
-            &mut joined_data,
-        );
+        let findings = course_query
+            .into_iter()
+            .filter_map(|x| {
+                if let ReceiverType::Course(x) = x {
+                    Some(x)
+                } else {
+                    None
+                }
+            })
+            .filter(|x| {
+                x.course.contains(&query)
+                    || x.course_nr.contains(&query)
+                    || x.description.contains(&query)
+                    || x.id.to_string().contains(&query)
+                    || x.timeslots.contains(&query)
+                    || x.teacher_id.to_string().contains(&query)
+                    || x.cr_cost.to_string().contains(&query)
+            })
+            // .map(|x| ReceiverType::Course(x.to_owned()))
+            .collect::<Vec<_>>();
 
-        Ok(joined_data)
+        return Ok(findings);
+
+        // let mut joined_data = Vec::new();
+
+        // self.join_courses_with_data(
+        //     findings,
+        //     teachers_query,
+        //     department_query,
+        //     users_query,
+        //     &mut joined_data,
+        // );
+
+        // Ok(joined_data)
     }
 
     pub fn enroll_courses(&mut self, courses: Vec<Course>) -> Result<()> {
@@ -634,7 +642,6 @@ impl ServerConnection {
         teachers_query: Vec<ReceiverType>,
         department_query: Vec<ReceiverType>,
         users_query: Vec<ReceiverType>,
-        query: String,
         joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
     ) {
         course_query.into_iter().for_each(|course_item| {
@@ -646,7 +653,6 @@ impl ServerConnection {
                     teacher_id,
                     &department_query,
                     &users_query,
-                    &query,
                     course,
                     joined_data,
                 );
@@ -660,7 +666,6 @@ impl ServerConnection {
         teacher_id: i32,
         department_query: &Vec<ReceiverType>,
         users_query: &Vec<ReceiverType>,
-        query: &String,
         course: Course,
         joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
     ) {
@@ -678,7 +683,6 @@ impl ServerConnection {
                 dept_id,
                 teacher,
                 users_query,
-                query,
                 course,
                 joined_data,
             );
@@ -691,7 +695,6 @@ impl ServerConnection {
         dept_id: i32,
         teacher: &TeacherAccount,
         users_query: &Vec<ReceiverType>,
-        query: &String,
         course: Course,
         joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
     ) {
@@ -707,7 +710,6 @@ impl ServerConnection {
             self.join_with_user(
                 users_query,
                 teacher_id,
-                query,
                 course,
                 teacher,
                 department,
@@ -720,7 +722,6 @@ impl ServerConnection {
         &self,
         users_query: &Vec<ReceiverType>,
         teacher_id: i32,
-        query: &String,
         course: Course,
         teacher: &TeacherAccount,
         department: &Department,
@@ -733,40 +734,13 @@ impl ServerConnection {
                 false
             }
         }) {
-            // Check if the query string is empty or matches any of the fields
-            let query_matched = self.did_query_match(query, &course, teacher, department, user);
-
-            if query_matched {
-                joined_data.push((
-                    course.clone(),
-                    teacher.clone(),
-                    department.clone(),
-                    user.clone(),
-                ));
-            }
+            joined_data.push((
+                course.clone(),
+                teacher.clone(),
+                department.clone(),
+                user.clone(),
+            ));
         }
-    }
-
-    fn did_query_match(
-        &self,
-        query: &String,
-        course: &Course,
-        teacher: &TeacherAccount,
-        department: &Department,
-        user: &User,
-    ) -> bool {
-        let query_matched = query.is_empty()
-            || course.course.contains(query)
-            || course.id.to_string().contains(query)
-            || teacher.id.to_string().contains(query)
-            || teacher.dept.contains(query)
-            || teacher.teacher_id.to_string().contains(query)
-            || department.id.to_string().contains(query)
-            || user.id.to_string().contains(query)
-            || user.email.contains(query)
-            || user.username.contains(query)
-            || user.phone.contains(query);
-        query_matched
     }
 
     fn update_user_as_student(&mut self, user: User) -> Result<()> {
