@@ -70,7 +70,7 @@ pub async fn get_teachers() -> impl Responder {
 #[get("/courses")]
 pub async fn get_courses() -> impl Responder {
     let conn = ServerConnection::new();
-    let courses = conn.search_courses("".to_string());
+    let courses = conn.search_crs("".to_string());
     match courses {
         Ok(c) => {
             let json = serde_json::to_string(&c);
@@ -317,7 +317,7 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
     }
 
-    let find_course = conn.search_courses(id.to_string());
+    let find_course = conn.search_crs(id.to_string());
 
     match find_course {
         Ok(c) => {

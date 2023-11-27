@@ -375,6 +375,30 @@ impl ServerConnection {
         Ok(users)
     }
 
+    pub fn search_crs(&self, query: String) -> Result<Vec<Course>> {
+        let findings = self.db.find(
+            Table::Courses,
+            vec![Filter::Courses(CoursesFilter::All)],
+            Some(Associativity::Or),
+        )?;
+
+        let courses = findings
+            .into_iter()
+            .filter_map(|x| {
+                if let ReceiverType::Course(course) = x {
+                    Some(course)
+                } else {
+                    None
+                }
+            })
+            .filter(|x| {
+                x.id.to_string().contains(&query)
+            })
+            .collect();
+
+        Ok(courses)
+    }
+
     pub fn search_courses(
         &self,
         query: String,
