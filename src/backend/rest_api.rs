@@ -92,7 +92,7 @@ pub async fn get_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing course id."}));
     }
 
-    let course_list = conn.search_courses(id.to_string());
+    let course_list = conn.search_crs(id.to_string());
 
     match course_list {
         Ok(c) => {
@@ -233,11 +233,10 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
 
     login!(login_email, login_password, conn);
 
-    let find_course = conn.search_courses(id.to_string());
+    let find_course = conn.search_crs(id.to_string());
     let requestee = conn
         .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .id;
+        .unwrap()[0].clone();
 
     match find_course {
         Ok(c) => {
@@ -250,7 +249,7 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
                     .json(json!({"error": "Multiple courses found."}));
             }
 
-            if c.get(0).unwrap().teacher_id != requestee {
+            if c.get(0).unwrap().teacher_id != requestee.id && requestee.role != "admin" {
                 return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
             }
 
