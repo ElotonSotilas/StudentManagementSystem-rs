@@ -164,8 +164,7 @@ impl ToSQL for Course {
             ),
 
             Action::Update => format!(
-                r#"UPDATE COURSES SET "teacher_id" = {}, "course" = '{}', "course_nr" = '{}', 
-                "description" = '{}', "cr_cost" = {}, "timeslots" = {} WHERE "id" = {}"#,
+                r#"UPDATE COURSES SET teacher_id = {}, course = '{}', course_nr = '{}', description = '{}', cr_cost = {}, timeslots = '{}' WHERE id = {}"#,
                 self.teacher_id, self.course, self.course_nr, 
                 self.description, self.cr_cost, self.timeslots, self.id
             ),
