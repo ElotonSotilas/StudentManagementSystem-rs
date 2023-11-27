@@ -633,10 +633,6 @@ impl ServerConnection {
             departments,
         })
     }
-
-    pub fn logout(&mut self) {
-        self.session = None;
-    }
 }
 
 // Private methods
@@ -659,11 +655,6 @@ impl ServerConnection {
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
 
         // Check permissions
-
-        if user.username != u.username {
-            return Err(anyhow!("Username cannot be changed."));
-        }
-
         if user.suspended != u.suspended {
             return Err(anyhow!("Suspended cannot be changed."));
         }

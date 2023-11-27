@@ -543,9 +543,6 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
     if username == "" {
         username = lookup_user.username;
     }
-    if password == "" {
-        password = lookup_user.password;
-    }
     if email == "" {
         email = lookup_user.email;
     }
@@ -723,7 +720,10 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
         None => String::new(),
     };
     let password = match password {
-        Some(p) => p.to_str().unwrap().to_string(),
+        Some(p) => {
+            user.forcenewpw = false;
+            p.to_str().unwrap().to_string()
+        },
         None => String::new(),
     };
     let mut phone = match phone {
@@ -1001,12 +1001,6 @@ macro_rules! login_macro {
     ($login_email:expr, $login_password:expr, $conn:expr) => {
         {
             match ($login_email, $login_password) {
-                (_, None) => {
-                    return HttpResponse::BadRequest().json(json!({"error": "Missing login email."}));
-                },
-                (None, _) => {
-                    return HttpResponse::BadRequest().json(json!({"error": "Missing login password."}));
-                },
                 (Some(a), Some(b)) => {
                     let username = a.to_str().unwrap().to_owned();
                     let password = b.to_str().unwrap().to_owned();
@@ -1017,6 +1011,12 @@ macro_rules! login_macro {
                             return HttpResponse::BadRequest().json(json!({"error": "Invalid login password."}));
                         }
                     }
+                },
+                (_, None) => {
+                    return HttpResponse::BadRequest().json(json!({"error": "Missing login password."}));
+                },
+                (None, _) => {
+                    return HttpResponse::BadRequest().json(json!({"error": "Missing login email."}));
                 },
             }
         }
