@@ -329,16 +329,13 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
                     .json(json!({"error": "Multiple courses found."}));
             }
 
-            if c.get(0).unwrap().teacher_id != teacher_id.parse::<i32>().unwrap() {
-                return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
-            }
-
             let mut course = c.get(0).unwrap().clone();
 
             course.course = name.to_string();
             course.description = description;
             course.course_nr = course_nr;
             course.cr_cost = cr_cost.parse::<i32>().unwrap();
+            course.teacher_id = teacher_id.parse::<i32>().unwrap();
             course.timeslots = timeslots.to_string();
 
             match conn.update_courses(vec![course]) {
