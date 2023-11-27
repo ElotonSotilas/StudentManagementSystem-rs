@@ -160,7 +160,7 @@ impl ServerConnection {
     }
 
     pub fn update_user(&mut self, user: User) -> Result<()> {
-                if let Some(s) = &self.session {
+        if let Some(s) = &self.session {
             match s.role.to_lowercase().as_str() {
                 "admin" => self.update_user_as_admin(user)?,
                 _ => self.update_user_as_student(user)?,
@@ -168,7 +168,6 @@ impl ServerConnection {
         } else {
             return Err(anyhow!("Must be signed in."));
         }
-
         Ok(())
     }
 
@@ -349,7 +348,7 @@ impl ServerConnection {
     }
 
     pub fn search_users(&self, query: String) -> Result<Vec<User>> {
-                let findings = self.db.find(
+        let findings = self.db.find(
             Table::Users,
             vec![Filter::Users(UsersFilter::All)],
             Some(Associativity::Or),
@@ -365,13 +364,11 @@ impl ServerConnection {
                 }
             })
             .filter(|x| {
-                // x.username.contains(&query)
                     x.email.contains(&query)
-                    // || x.phone.contains(&query)
                     || x.id.to_string().contains(&query)
             })
             .collect();
-        
+
         Ok(users)
     }
 
@@ -796,7 +793,6 @@ impl ServerConnection {
     }
 
     fn update_user_as_admin(&mut self, user: User) -> Result<()> {
-        println!("update_user_as_admin {:?}", user.id);
         let binding =
             self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
