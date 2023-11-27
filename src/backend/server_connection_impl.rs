@@ -6,7 +6,6 @@ use super::table_models::*;
 use anyhow::anyhow;
 use anyhow::Ok;
 use anyhow::Result;
-use argon2::password_hash::Ident;
 use chrono::Datelike;
 use regex::Regex;
 
@@ -148,6 +147,10 @@ impl ServerConnection {
         // If the user is suspended, they cannot login
         if user.suspended {
             return Err(anyhow!("User is suspended."));
+        }
+
+        if user.forcenewpw {
+            return Err(anyhow!("User must change password."));
         }
 
         // check hash for validity and then compare both server and client password hashes
@@ -372,7 +375,7 @@ impl ServerConnection {
         Ok(users)
     }
 
-    pub fn search_crs(&self, query: String) -> Result<Vec<Course>> {
+    pub fn search_courses(&self, query: String) -> Result<Vec<Course>> {
         let findings = self.db.find(
             Table::Courses,
             vec![Filter::Courses(CoursesFilter::All)],
@@ -396,51 +399,46 @@ impl ServerConnection {
         Ok(courses)
     }
 
-    pub fn search_courses(
-        &self,
-        query: String,
-    ) -> Result<Vec<Course>> {
-        let course_query = self.db.find(Table::Courses, vec![], None)?;
-        let teachers_query = self.db.find(Table::TeacherAccount, vec![], None)?;
-        let department_query = self.db.find(Table::Departments, vec![], None)?;
-        let users_query = self.db.find(Table::Users, vec![], None)?;
+    pub fn get_departments(&self) -> Result<Vec<Department>> {
+        let findings = self.db.find(
+            Table::Departments,
+            vec![Filter::Departments(DepartmentsFilter::All)],
+            Some(Associativity::Or),
+        )?;
 
-        let query = query.trim().to_lowercase(); // trim and convert to lowercase
-
-        let findings = course_query
+        let departments = findings
             .into_iter()
             .filter_map(|x| {
-                if let ReceiverType::Course(x) = x {
-                    Some(x)
+                if let ReceiverType::Department(department) = x {
+                    Some(department)
                 } else {
                     None
                 }
             })
-            .filter(|x| {
-                x.course.contains(&query)
-                    || x.course_nr.contains(&query)
-                    || x.description.contains(&query)
-                    || x.id.to_string().contains(&query)
-                    || x.timeslots.contains(&query)
-                    || x.teacher_id.to_string().contains(&query)
-                    || x.cr_cost.to_string().contains(&query)
+            .collect();
+
+        Ok(departments)
+    }
+
+    pub fn get_teacher_accounts(&self) -> Result<Vec<TeacherAccount>> {
+        let findings = self.db.find(
+            Table::TeacherAccount,
+            vec![Filter::TeacherAccount(TeacherAccountFilter::All)],
+            Some(Associativity::Or),
+        )?;
+
+        let teacher_accounts = findings
+            .into_iter()
+            .filter_map(|x| {
+                if let ReceiverType::TeacherAccount(teacher_account) = x {
+                    Some(teacher_account)
+                } else {
+                    None
+                }
             })
-            // .map(|x| ReceiverType::Course(x.to_owned()))
-            .collect::<Vec<_>>();
+            .collect();
 
-        return Ok(findings);
-
-        // let mut joined_data = Vec::new();
-
-        // self.join_courses_with_data(
-        //     findings,
-        //     teachers_query,
-        //     department_query,
-        //     users_query,
-        //     &mut joined_data,
-        // );
-
-        // Ok(joined_data)
+        Ok(teacher_accounts)
     }
 
     pub fn enroll_courses(&mut self, courses: Vec<Course>) -> Result<()> {
@@ -491,6 +489,68 @@ impl ServerConnection {
         }
     }
 
+    pub fn list_enrollments(&self) -> Result<Vec<StudentCourse>> {
+        if let Some(session) = &self.session {
+            match session.role.to_lowercase().as_str() {
+                "student" => {
+                    let findings = self.db.find(
+                        Table::StudentCourses,
+                        vec![Filter::StudentCourses(StudentCoursesFilter::StudentId(session.id))],
+                        None,
+                    )?;
+
+                    let courses = findings
+                        .into_iter()
+                        .filter_map(|x| {
+                            if let ReceiverType::StudentCourse(course) = x {
+                                Some(course)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    Ok(courses)
+                }
+                _ => Err(anyhow!("You are not a student.")),
+            }
+        } else {
+            Err(anyhow!("Must be signed in."))
+        }
+    }
+
+    pub fn get_student_standing(&self) -> Result<StudentAccount> {
+        if let Some(session) = &self.session {
+            match session.role.to_lowercase().as_str() {
+                "student" => {
+                    let findings = self.db.find(
+                        Table::StudentAccount,
+                        vec![Filter::StudentAccount(StudentAccountFilter::StudentId(
+                        session.id
+                        ))],
+                        None
+                    );
+
+                    let student = findings?
+                        .into_iter()
+                        .filter_map(|x| {
+                            if let ReceiverType::StudentAccount(student) = x {
+                                Some(student)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    Ok(student[0].to_owned())
+                }
+                _ => Err(anyhow!("You are not a student.")),
+            }
+        } else {
+            Err(anyhow!("Must be signed in."))
+        }
+    }
+
     pub fn drop_courses(&mut self, courses: Vec<Course>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
@@ -533,70 +593,6 @@ impl ServerConnection {
                     Ok(())
                 }
                 _ => Err(anyhow!("You do not have permission to drop courses.")),
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
-    pub fn set_user_role(&mut self, user: User, role: &str) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "admin" => {
-                    let mut updated = user.to_owned();
-                    updated.role = role.to_string();
-                    let upcast = ReceiverType::User(updated);
-
-                    self.db.update(vec![upcast])?;
-
-                    Ok(())
-                }
-
-                _ => {
-                    return Err(anyhow!(
-                        "You do not have permission to promote users to teachers."
-                    ))
-                }
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
-    pub fn suspend_user(&mut self, user: User) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "admin" => {
-                    let mut updated = user.to_owned();
-                    updated.suspended = true;
-                    let upcast = ReceiverType::User(updated);
-
-                    self.db.update(vec![upcast])?;
-
-                    Ok(())
-                }
-
-                _ => Err(anyhow!("You do not have permission to suspend users.")),
-            }
-        } else {
-            Err(anyhow!("Must be signed in."))
-        }
-    }
-
-    pub fn unsuspend_user(&mut self, user: User) -> Result<()> {
-        if let Some(session) = &self.session {
-            match session.role.to_lowercase().as_str() {
-                "admin" => {
-                    let mut updated = user.to_owned();
-                    updated.suspended = false;
-                    let upcast = ReceiverType::User(updated);
-
-                    self.db.update(vec![upcast])?;
-
-                    Ok(())
-                }
-
-                _ => Err(anyhow!("You do not have permission to unsuspend users.")),
             }
         } else {
             Err(anyhow!("Must be signed in."))
@@ -654,113 +650,6 @@ impl ServerConnection {
                 6..=12 => "Fall".to_string(),
                 _ => "Spring".to_string(),
             },
-        }
-    }
-
-    fn join_courses_with_data(
-        &self,
-        course_query: Vec<ReceiverType>,
-        teachers_query: Vec<ReceiverType>,
-        department_query: Vec<ReceiverType>,
-        users_query: Vec<ReceiverType>,
-        joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
-    ) {
-        course_query.into_iter().for_each(|course_item| {
-            if let ReceiverType::Course(course) = course_item {
-                let teacher_id = course.teacher_id;
-
-                self.join_with_teacher(
-                    &teachers_query,
-                    teacher_id,
-                    &department_query,
-                    &users_query,
-                    course,
-                    joined_data,
-                );
-            }
-        });
-    }
-
-    fn join_with_teacher(
-        &self,
-        teachers_query: &Vec<ReceiverType>,
-        teacher_id: i32,
-        department_query: &Vec<ReceiverType>,
-        users_query: &Vec<ReceiverType>,
-        course: Course,
-        joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
-    ) {
-        if let Some(ReceiverType::TeacherAccount(teacher)) = teachers_query.iter().find(|&t| {
-            if let ReceiverType::TeacherAccount(teacher) = t {
-                teacher.id == teacher_id
-            } else {
-                false
-            }
-        }) {
-            let dept_id = teacher.dept_id;
-
-            self.join_with_department(
-                department_query,
-                dept_id,
-                teacher,
-                users_query,
-                course,
-                joined_data,
-            );
-        }
-    }
-
-    fn join_with_department(
-        &self,
-        department_query: &Vec<ReceiverType>,
-        dept_id: i32,
-        teacher: &TeacherAccount,
-        users_query: &Vec<ReceiverType>,
-        course: Course,
-        joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
-    ) {
-        if let Some(ReceiverType::Department(department)) = department_query.iter().find(|&d| {
-            if let ReceiverType::Department(department) = d {
-                department.id == dept_id
-            } else {
-                false
-            }
-        }) {
-            let teacher_id = teacher.teacher_id;
-
-            self.join_with_user(
-                users_query,
-                teacher_id,
-                course,
-                teacher,
-                department,
-                joined_data,
-            );
-        }
-    }
-
-    fn join_with_user(
-        &self,
-        users_query: &Vec<ReceiverType>,
-        teacher_id: i32,
-        course: Course,
-        teacher: &TeacherAccount,
-        department: &Department,
-        joined_data: &mut Vec<(Course, TeacherAccount, Department, User)>,
-    ) {
-        if let Some(ReceiverType::User(user)) = users_query.iter().find(|&u| {
-            if let ReceiverType::User(user) = u {
-                user.id == teacher_id
-            } else {
-                false
-            }
-        }) {
-            joined_data.push((
-                course.clone(),
-                teacher.clone(),
-                department.clone(),
-                user.clone(),
-            ));
         }
     }
 

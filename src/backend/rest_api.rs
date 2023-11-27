@@ -1,7 +1,7 @@
 use actix_web::{delete, get, patch, post, HttpRequest, HttpResponse, Responder};
-use serde_json::json;
+use serde_json::{json, Value};
 
-use crate::backend::{password, table_models::User};
+use crate::backend::table_models::User;
 use crate::login_macro as login;
 
 use super::{
@@ -70,15 +70,72 @@ pub async fn get_teachers() -> impl Responder {
 #[get("/courses")]
 pub async fn get_courses() -> impl Responder {
     let conn = ServerConnection::new();
-    let courses = conn.search_crs("".to_string());
-    match courses {
+
+    let courses = match conn.search_courses("".to_string()) {
         Ok(c) => {
             let json = serde_json::to_string(&c);
             match json {
-                Ok(j) => HttpResponse::Ok().body(j),
-                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}))
+                }
             }
         }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let users = match conn.get_users_by_filters(vec![Filter::Users(UsersFilter::Role(
+        "teacher".to_string(),
+    ))]) {
+        Ok(t) => {
+            let json = serde_json::to_string(&t);
+            match json {
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}))
+                }
+            }
+        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let departments = match conn.get_departments() {
+        Ok(d) => {
+            let json = serde_json::to_string(&d);
+            match json {
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}))
+                }
+            }
+        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let teacher_accounts = match conn.get_teacher_accounts() {
+        Ok(t) => {
+            let json = serde_json::to_string(&t);
+            match json {
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}))
+                }
+            }
+        }
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let json_prep = format!(
+        "{{\"courses\": {}, \"users\": {}, \"teacher_accounts\": {}, \"departments\": {}}}",
+        courses, users, teacher_accounts, departments
+    );
+
+    match serde_json::from_str::<Value>(&json_prep) {
+        Ok(json3) => HttpResponse::Ok().json(json3),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -92,51 +149,70 @@ pub async fn get_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing course id."}));
     }
 
-    let course_list = conn.search_crs(id.to_string());
+    let course = match conn.search_courses(id.to_string()) {
+        Ok(c) => c[0].to_owned(),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
 
-    match course_list {
-        Ok(c) => {
-            println!("{:?}", c);
-            // let mut json = Vec::new();
-            // for (c, t, d, u) in c {
-            //     let json1 = match serde_json::to_string(&c) {
-            //         Ok(j) => j,
-            //         Err(e) => {
-            //             return HttpResponse::InternalServerError()
-            //                 .json(json!({"error": e.to_string()}))
-            //         }
-            //     };
-            //     let json2 = match serde_json::to_string(&t) {
-            //         Ok(j) => j,
-            //         Err(e) => {
-            //             return HttpResponse::InternalServerError()
-            //                 .json(json!({"error": e.to_string()}))
-            //         }
-            //     };
-            //     let json3 = match serde_json::to_string(&d) {
-            //         Ok(j) => j,
-            //         Err(e) => {
-            //             return HttpResponse::InternalServerError()
-            //                 .json(json!({"error": e.to_string()}))
-            //         }
-            //     };
-            //     let json4 = match serde_json::to_string(&u) {
-            //         Ok(j) => j,
-            //         Err(e) => {
-            //             return HttpResponse::InternalServerError()
-            //                 .json(json!({"error": e.to_string()}))
-            //         }
-            //     };
+    let user = match conn.get_users_by_filters(vec![Filter::Users(UsersFilter::Role(
+        "teacher".to_string(),
+    ))]) {
+        Ok(t) => t
+            .into_iter()
+            .filter_map(|u| {
+                if course.teacher_id == u.id {
+                    Some(u)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()[0]
+            .to_owned(),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
 
-            //     let sum = format!("{},{},{},{}", json1, json2, json3, json4);
+    let teacher_account = match conn.get_teacher_accounts() {
+        Ok(t) => t
+            .into_iter()
+            .filter_map(|t| {
+                if user.id == t.teacher_id {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()[0]
+            .to_owned(),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
 
-            //     json.push(sum);
-            // }
+    let departments = match conn.get_departments() {
+        Ok(d) => d
+            .into_iter()
+            .filter_map(|d| {
+                if teacher_account.dept_id == d.id {
+                    Some(d)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()[0]
+            .to_owned(),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
 
-            let j = serde_json::to_string(&c).unwrap();
+    let course = serde_json::to_string(&course).unwrap();
+    let user = serde_json::to_string(&user).unwrap();
+    let teacher_account = serde_json::to_string(&teacher_account).unwrap();
+    let departments = serde_json::to_string(&departments).unwrap();
 
-            HttpResponse::Ok().body(j)
-        }
+    let json_prep = format!(
+        "{{\"course\": {}, \"user\": {}, \"teacher_account\": {}, \"department\": {}}}",
+        course, user, teacher_account, departments
+    );
+
+    match serde_json::from_str::<Value>(&json_prep) {
+        Ok(j) => HttpResponse::Ok().json(j),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -151,23 +227,14 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
 
     login!(login_email, login_password, conn);
 
-    let user = conn
-        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .to_owned();
-
-    if user.role != "teacher" && user.role != "admin" {
-        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
-    }
-
-    let name = request_headers.get("name");
+    let course = request_headers.get("name");
     let description = request_headers.get("description");
     let course_nr = request_headers.get("course_nr");
     let teacher_id = request_headers.get("id");
     let cr_cost = request_headers.get("cr_cost");
     let timeslots = request_headers.get("timeslots");
 
-    if name.is_none()
+    if course.is_none()
         || teacher_id.is_none()
         || course_nr.is_none()
         || cr_cost.is_none()
@@ -176,7 +243,11 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing required data."}));
     }
 
-    let name = name.unwrap().to_str().unwrap();
+    let course = course
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     let description = description
         .unwrap()
         .to_str()
@@ -209,7 +280,7 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
         id: 0, // This will be set by the database.
         description,
         teacher_id,
-        course: name.to_string(),
+        course,
         course_nr,
         cr_cost,
         timeslots,
@@ -233,10 +304,7 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
 
     login!(login_email, login_password, conn);
 
-    let find_course = conn.search_crs(id.to_string());
-    let requestee = conn
-        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0].clone();
+    let find_course = conn.search_courses(id.to_string());
 
     match find_course {
         Ok(c) => {
@@ -247,10 +315,6 @@ pub async fn remove_course(req: HttpRequest) -> impl Responder {
             if c.len() > 1 {
                 return HttpResponse::InternalServerError()
                     .json(json!({"error": "Multiple courses found."}));
-            }
-
-            if c.get(0).unwrap().teacher_id != requestee.id && requestee.role != "admin" {
-                return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
             }
 
             let course = c.get(0).unwrap().clone();
@@ -308,15 +372,7 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
 
     login!(login_email, login_password, conn);
 
-    let requestee = conn
-        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0].clone();
-
-    if requestee.id != teacher_id.parse::<i32>().unwrap() && requestee.role != "admin" {
-        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
-    }
-
-    let find_course = conn.search_crs(id.to_string());
+    let find_course = conn.search_courses(id.to_string());
 
     match find_course {
         Ok(c) => {
@@ -329,10 +385,6 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
                     .json(json!({"error": "Multiple courses found."}));
             }
 
-            if c.get(0).unwrap().teacher_id != teacher_id.parse::<i32>().unwrap() {
-                return HttpResponse::BadRequest().json(json!({"error": "Unauthorized."}));
-            }
-
             let mut course = c.get(0).unwrap().clone();
 
             course.course = name.to_string();
@@ -340,6 +392,7 @@ pub async fn update_course(req: HttpRequest) -> impl Responder {
             course.course_nr = course_nr;
             course.cr_cost = cr_cost.parse::<i32>().unwrap();
             course.timeslots = timeslots.to_string();
+            course.teacher_id = teacher_id.parse::<i32>().unwrap();
 
             match conn.update_courses(vec![course]) {
                 Ok(_) => {
@@ -400,6 +453,18 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
         Ok(i) => i,
         Err(_) => return HttpResponse::BadRequest().json(json!({"error": "Invalid id."})),
     };
+
+    let mut lookup_user = match conn.search_users(format!("{}", id)) {
+        Ok(u) => match u.get(0) {
+            Some(u) => u.to_owned(),
+            None => return HttpResponse::BadRequest().json(json!({"error": "User not found."})),
+        },
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    }
+    .to_owned();
+
     let mut username = match request_headers.get("username") {
         Some(u) => u.to_str().unwrap().to_string(),
         None => String::new(),
@@ -416,48 +481,40 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
         Some(p) => p.to_str().unwrap().to_string(),
         None => String::new(),
     };
-    let mut verified = match request_headers.get("verified") {
+    let verified = match request_headers.get("verified") {
         Some(v) => match v.to_str().unwrap().parse::<bool>() {
             Ok(b) => b,
             Err(_) => {
                 return HttpResponse::BadRequest().json(json!({"error": "Invalid verified."}))
             }
         },
-        None => false,
+        None => lookup_user.verified,
     };
-    let mut suspended = match request_headers.get("suspended") {
+
+    let suspended = match request_headers.get("suspended") {
         Some(s) => match s.to_str().unwrap().parse::<bool>() {
             Ok(b) => b,
             Err(_) => {
                 return HttpResponse::BadRequest().json(json!({"error": "Invalid suspended."}))
             }
         },
-        None => false,
+        None => lookup_user.suspended,
     };
-    let mut forcenewpw = match request_headers.get("forcenewpw") {
+
+    let forcenewpw = match request_headers.get("forcenewpw") {
         Some(f) => match f.to_str().unwrap().parse::<bool>() {
             Ok(b) => b,
             Err(_) => {
                 return HttpResponse::BadRequest().json(json!({"error": "Invalid forcenewpw."}))
             }
         },
-        None => false,
+        None => lookup_user.forcenewpw,
     };
+
     let mut role = match request_headers.get("role") {
         Some(r) => r.to_str().unwrap().to_string(),
         None => String::new(),
     };
-
-    let mut lookup_user = match conn.search_users(format!("{}", id)) {
-        Ok(u) => match u.get(0) {
-            Some(u) => u.to_owned(),
-            None => return HttpResponse::BadRequest().json(json!({"error": "User not found."})),
-        },
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
-        }
-    }
-    .to_owned();
 
     if username == "" {
         username = lookup_user.username;
@@ -473,15 +530,6 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
     }
     if role == "" {
         role = lookup_user.role;
-    }
-    if verified == false {
-        verified = lookup_user.verified; // it might do another reassignment of the same value, but this is done because I unwrapped the option
-    }
-    if suspended == false {
-        suspended = lookup_user.suspended;
-    }
-    if forcenewpw == false {
-        forcenewpw = lookup_user.forcenewpw;
     }
 
     lookup_user.username = username;
@@ -524,18 +572,14 @@ pub async fn delete_user(req: HttpRequest) -> impl Responder {
 
     let user = conn.search_users(format!("{}", id)).unwrap()[0].clone();
 
-    if user.role != "admin" {
-        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized."}));
-    }
-
     match conn.delete_user(user) {
         Ok(_) => return HttpResponse::Ok().json(json!({"message": "Successfully deleted user."})),
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
-#[delete("/account")]
-pub async fn delete_self(req: HttpRequest) -> impl Responder {
+#[get("/account")]
+pub async fn get_self(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
@@ -544,13 +588,84 @@ pub async fn delete_self(req: HttpRequest) -> impl Responder {
 
     login!(email, password, conn);
 
-    let user = conn
-        .search_users(format!("{}", email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .to_owned();
+    let user_email = email.unwrap().to_str().unwrap();
+    let user = match conn.search_users(format!("{}", user_email)) {
+        Ok(users) => users.get(0).cloned(),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    };
 
-    match conn.delete_user(user) {
-        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully deleted user."})),
+    let enrolled_in;
+
+    let enrollments_json = match conn.list_enrollments() {
+        Ok(e) => {
+            enrolled_in = e;
+            match serde_json::to_string(&enrolled_in) {
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}));
+                }
+            }
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    };
+
+    let courses_json = match conn.search_courses("".to_owned()) {
+        Ok(c) => {
+            let c = c
+                .into_iter()
+                .filter_map(|c| {
+                    if enrolled_in.iter().any(|e| e.course_id == c.id) {
+                        Some(c)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<Course>>();
+            match serde_json::to_string(&c) {
+                Ok(j) => j,
+                Err(e) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": e.to_string()}));
+                }
+            }
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    };
+
+    let standing_json = match conn.get_student_standing() {
+        Ok(s) => match serde_json::to_string(&s) {
+            Ok(j) => j,
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        },
+
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    };
+
+    let user_json = match serde_json::to_string(&user) {
+        Ok(j) => j,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        }
+    };
+
+    let json_prep = format!(
+        "{{\"user\": {}, \"enrollments\": {}, \"standing\": {}, \"courses\": {}}}",
+        user_json, enrollments_json, standing_json, courses_json
+    );
+
+    match serde_json::from_str::<Value>(&json_prep) {
+        Ok(json3) => HttpResponse::Ok().json(json3),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -574,7 +689,6 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
     let email = request_headers.get("email");
     let password = request_headers.get("password");
     let phone = request_headers.get("phone");
-    let role = request_headers.get("role");
 
     let mut username = match username {
         Some(u) => u.to_str().unwrap().to_string(),
@@ -592,10 +706,6 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
         Some(p) => p.to_str().unwrap().to_string(),
         None => String::new(),
     };
-    let mut role = match role {
-        Some(r) => r.to_str().unwrap().to_string(),
-        None => String::new(),
-    };
 
     if username == "" {
         username = user.username;
@@ -603,31 +713,18 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
     if email == "" {
         email = user.email;
     }
-    if password == "" {
-        password = user.password.clone();
-    }
     if phone == "" {
         phone = user.phone;
-    }
-    if role == "" {
-        role = user.role;
     }
 
     user.username = username;
     user.email = email;
     user.password = password;
     user.phone = phone;
-    user.role = role;
 
     match conn.update_user(user.clone()) {
-        Ok(_) => {}
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
-    }
-    let json = serde_json::to_string(&user);
-
-    match json {
-        Ok(j) => return HttpResponse::Ok().body(j),
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully updated."})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 
@@ -664,7 +761,7 @@ pub async fn enroll(req: HttpRequest) -> impl Responder {
         Ok(_) => {
             let json = serde_json::to_string(&user);
             match json {
-                Ok(j) => return HttpResponse::Ok().body(j),
+                Ok(j) => return HttpResponse::Ok().json(j),
                 Err(_) => {
                     return HttpResponse::InternalServerError()
                         .json(json!({"error": "Failed to serialize user"}))
@@ -677,7 +774,7 @@ pub async fn enroll(req: HttpRequest) -> impl Responder {
 }
 
 #[post("/unenroll/{id}")]
-pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn unenroll(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
@@ -722,7 +819,7 @@ pub async fn unenroll(req: actix_web::HttpRequest) -> impl Responder {
 }
 
 #[post("/login")]
-pub async fn login(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn login(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
@@ -768,7 +865,7 @@ pub async fn login(req: actix_web::HttpRequest) -> impl Responder {
 }
 
 #[get("/logout")]
-pub async fn logout(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn logout(req: HttpRequest) -> impl Responder {
     let request_headers = req.headers();
 
     let email = request_headers.get("login_email");
@@ -782,7 +879,7 @@ pub async fn logout(req: actix_web::HttpRequest) -> impl Responder {
 }
 
 #[post("/register")]
-pub async fn register(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn register(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 
@@ -824,7 +921,7 @@ pub async fn register(req: actix_web::HttpRequest) -> impl Responder {
 }
 
 #[post("/admin/register")]
-pub async fn register_admin(req: actix_web::HttpRequest) -> impl Responder {
+pub async fn register_admin(req: HttpRequest) -> impl Responder {
     let mut conn = ServerConnection::new();
     let request_headers = req.headers();
 

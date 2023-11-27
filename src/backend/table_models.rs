@@ -176,7 +176,7 @@ impl ToSQL for Course {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct StudentCourse {
     pub student_id: i32,
     pub course_id: i32,
