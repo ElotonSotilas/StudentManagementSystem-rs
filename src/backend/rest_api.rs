@@ -157,47 +157,75 @@ pub async fn get_course(req: HttpRequest) -> impl Responder {
     let user = match conn.get_users_by_filters(vec![Filter::Users(UsersFilter::Role(
         "teacher".to_string(),
     ))]) {
-        Ok(t) => t
-            .into_iter()
-            .filter_map(|u| {
-                if course.teacher_id == u.id {
-                    Some(u)
-                } else {
-                    None
+        Ok(t) => {
+            let u = t
+                .iter()
+                .filter_map(|u| {
+                    if course.teacher_id == u.id {
+                        Some(u.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            match u.get(0) {
+                Some(u) => u.to_owned(),
+                None => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": "A teacher with this ID does not exist."}))
                 }
-            })
-            .collect::<Vec<_>>()[0]
-            .to_owned(),
+            }
+        }
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     };
 
     let teacher_account = match conn.get_teacher_accounts() {
-        Ok(t) => t
-            .into_iter()
-            .filter_map(|t| {
-                if user.id == t.teacher_id {
-                    Some(t)
-                } else {
-                    None
+        Ok(t) => {
+            let a = t
+                .into_iter()
+                .filter_map(|t| {
+                    if course.teacher_id == t.teacher_id {
+                        Some(t.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            match a.get(0) {
+                Some(a) => a.to_owned(),
+                None => {
+                    return HttpResponse::InternalServerError().json(
+                        json!({"error": "A teacher account with this Teacher ID does not exist."}),
+                    )
                 }
-            })
-            .collect::<Vec<_>>()[0]
-            .to_owned(),
+            }
+        }
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     };
 
     let departments = match conn.get_departments() {
-        Ok(d) => d
-            .into_iter()
-            .filter_map(|d| {
-                if teacher_account.dept_id == d.id {
-                    Some(d)
-                } else {
-                    None
+        Ok(d) => {
+            let dep = d
+                .into_iter()
+                .filter_map(|d| {
+                    if teacher_account.dept_id == d.id {
+                        Some(d)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            match dep.get(0) {
+                Some(d) => d.to_owned(),
+                None => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": "A department with such ID does not exist."}))
                 }
-            })
-            .collect::<Vec<_>>()[0]
-            .to_owned(),
+            }
+        }
         Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     };
 
@@ -243,11 +271,7 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Missing required data."}));
     }
 
-    let course = course
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let course = course.unwrap().to_str().unwrap().to_string();
     let description = description
         .unwrap()
         .to_str()
@@ -698,7 +722,7 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
         Some(e) => e.to_str().unwrap().to_string(),
         None => String::new(),
     };
-    let mut password = match password {
+    let password = match password {
         Some(p) => p.to_str().unwrap().to_string(),
         None => String::new(),
     };

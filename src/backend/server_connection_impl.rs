@@ -353,8 +353,8 @@ impl ServerConnection {
     pub fn search_users(&self, query: String) -> Result<Vec<User>> {
         let findings = self.db.find(
             Table::Users,
-            vec![Filter::Users(UsersFilter::All)],
-            Some(Associativity::Or),
+            vec![],
+            None,
         )?;
 
         let users = findings
@@ -378,8 +378,8 @@ impl ServerConnection {
     pub fn search_courses(&self, query: String) -> Result<Vec<Course>> {
         let findings = self.db.find(
             Table::Courses,
-            vec![Filter::Courses(CoursesFilter::All)],
-            Some(Associativity::Or),
+            vec![],
+            None,
         )?;
 
         let courses = findings
@@ -402,8 +402,8 @@ impl ServerConnection {
     pub fn get_departments(&self) -> Result<Vec<Department>> {
         let findings = self.db.find(
             Table::Departments,
-            vec![Filter::Departments(DepartmentsFilter::All)],
-            Some(Associativity::Or),
+            vec![],
+            None,
         )?;
 
         let departments = findings
@@ -423,8 +423,8 @@ impl ServerConnection {
     pub fn get_teacher_accounts(&self) -> Result<Vec<TeacherAccount>> {
         let findings = self.db.find(
             Table::TeacherAccount,
-            vec![Filter::TeacherAccount(TeacherAccountFilter::All)],
-            Some(Associativity::Or),
+            vec![],
+            None,
         )?;
 
         let teacher_accounts = findings

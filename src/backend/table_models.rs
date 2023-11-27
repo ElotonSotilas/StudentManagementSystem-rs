@@ -63,13 +63,25 @@ impl ToSQL for User {
                     self.verified, self.suspended, self.forcenewpw, self.role
             ),
 
-            Action::Update => format!(
-                "UPDATE USERS SET username = '{}', password = '{}', email = '{}', phone = '{}', 
-                    verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
-                    WHERE id = {}",
-                self.username, self.password, self.email, self.phone, 
-                    self.verified, self.suspended, self.forcenewpw, self.role, self.id
-            ),
+            Action::Update => {
+                if self.password == "" {
+                    return format!(
+                        "UPDATE USERS SET username = '{}', email = '{}', phone = '{}', 
+                            verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
+                            WHERE id = {}",
+                        self.username, self.email, self.phone,
+                        self.verified, self.suspended, self.forcenewpw, self.role, self.id
+                    )
+                }
+                
+                format!(
+                    "UPDATE USERS SET username = '{}', password = '{}', email = '{}', phone = '{}', 
+                        verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
+                        WHERE id = {}",
+                    self.username, self.password, self.email, self.phone, 
+                        self.verified, self.suspended, self.forcenewpw, self.role, self.id
+                )
+            },
 
             Action::Delete => format!(
                 "DELETE FROM USERS WHERE id = {}", self.id
