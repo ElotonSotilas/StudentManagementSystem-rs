@@ -1,7 +1,7 @@
 use actix_web::{delete, get, patch, post, HttpRequest, HttpResponse, Responder};
 use serde_json::{json, Value};
 
-use crate::backend::table_models::User;
+use crate::backend::table_models::{User, TeacherAccount};
 use crate::login_macro as login;
 
 use super::{
@@ -130,9 +130,7 @@ pub async fn new_department(req: HttpRequest) -> impl Responder {
 
     let department = conn.new_department(department);
     match department {
-        Ok(_) => {
-            HttpResponse::Ok().json(json!({"message": "Successfully created department."}))
-        }
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully created department."})),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -209,7 +207,11 @@ pub async fn invite_to_department(req: HttpRequest) -> impl Responder {
 
     let teachers = conn.get_teacher_accounts();
     let mut teacher = match teachers {
-        Ok(t) => match t.into_iter().filter(|t| t.teacher_id == teacher).collect::<Vec<_>>() {
+        Ok(t) => match t
+            .into_iter()
+            .filter(|t| t.teacher_id == teacher)
+            .collect::<Vec<_>>()
+        {
             v if v.is_empty() => {
                 return HttpResponse::BadRequest().json(json!({"error": "Teacher not found."}))
             }
@@ -223,7 +225,8 @@ pub async fn invite_to_department(req: HttpRequest) -> impl Responder {
     let invitation = conn.update_teacher_account(teacher);
 
     match invitation {
-        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully invited teacher to department."})),
+        Ok(_) => HttpResponse::Ok()
+            .json(json!({"message": "Successfully invited teacher to department."})),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -261,7 +264,11 @@ pub async fn kick_from_department(req: HttpRequest) -> impl Responder {
 
     let teachers = conn.get_teacher_accounts();
     let mut teacher = match teachers {
-        Ok(t) => match t.into_iter().filter(|t| t.teacher_id == teacher).collect::<Vec<_>>() {
+        Ok(t) => match t
+            .into_iter()
+            .filter(|t| t.teacher_id == teacher)
+            .collect::<Vec<_>>()
+        {
             v if v.is_empty() => {
                 return HttpResponse::BadRequest().json(json!({"error": "Teacher not found."}))
             }
@@ -275,7 +282,8 @@ pub async fn kick_from_department(req: HttpRequest) -> impl Responder {
     let invitation = conn.update_teacher_account(teacher);
 
     match invitation {
-        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully kicked teacher from department."})),
+        Ok(_) => HttpResponse::Ok()
+            .json(json!({"message": "Successfully kicked teacher from department."})),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
@@ -811,83 +819,150 @@ pub async fn get_self(req: HttpRequest) -> impl Responder {
 
     let user_email = email.unwrap().to_str().unwrap();
     let user = match conn.search_users(format!("{}", user_email)) {
-        Ok(users) => users.get(0).cloned(),
+        Ok(users) => match users.get(0) {
+            Some(u) => u.to_owned(),
+            None => return HttpResponse::InternalServerError().json(json!({"error": "User not found."})),
+        },
         Err(e) => {
             return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
         }
     };
 
-    let enrolled_in;
+    if conn.is_student() {
+        let enrolled_in;
 
-    let enrollments_json = match conn.list_enrollments() {
-        Ok(e) => {
-            enrolled_in = e;
-            match serde_json::to_string(&enrolled_in) {
-                Ok(j) => j,
-                Err(e) => {
-                    return HttpResponse::InternalServerError()
-                        .json(json!({"error": e.to_string()}));
-                }
-            }
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
-        }
-    };
-
-    let courses_json = match conn.search_courses("".to_owned()) {
-        Ok(c) => {
-            let c = c
-                .into_iter()
-                .filter_map(|c| {
-                    if enrolled_in.iter().any(|e| e.course_id == c.id) {
-                        Some(c)
-                    } else {
-                        None
+        let enrollments_json = match conn.list_enrollments() {
+            Ok(e) => {
+                enrolled_in = e;
+                match serde_json::to_string(&enrolled_in) {
+                    Ok(j) => j,
+                    Err(e) => {
+                        return HttpResponse::InternalServerError()
+                            .json(json!({"error": e.to_string()}));
                     }
-                })
-                .collect::<Vec<Courses>>();
-            match serde_json::to_string(&c) {
+                }
+            }
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
+
+        let courses_json = match conn.search_courses("".to_owned()) {
+            Ok(c) => {
+                let c = c
+                    .into_iter()
+                    .filter_map(|c| {
+                        if enrolled_in.iter().any(|e| e.course_id == c.id) {
+                            Some(c)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Courses>>();
+                match serde_json::to_string(&c) {
+                    Ok(j) => j,
+                    Err(e) => {
+                        return HttpResponse::InternalServerError()
+                            .json(json!({"error": e.to_string()}));
+                    }
+                }
+            }
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
+
+        let standing_json = match conn.get_student_standing() {
+            Ok(s) => match serde_json::to_string(&s) {
                 Ok(j) => j,
                 Err(e) => {
                     return HttpResponse::InternalServerError()
                         .json(json!({"error": e.to_string()}));
                 }
-            }
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
-        }
-    };
+            },
 
-    let standing_json = match conn.get_student_standing() {
-        Ok(s) => match serde_json::to_string(&s) {
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
+
+        let user_json = match serde_json::to_string(&user) {
             Ok(j) => j,
             Err(e) => {
                 return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
             }
-        },
+        };
 
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+        let json_prep = format!(
+            "{{\"user\": {}, \"enrollments\": {}, \"standing\": {}, \"courses\": {}}}",
+            user_json, enrollments_json, standing_json, courses_json
+        );
+
+        match serde_json::from_str::<Value>(&json_prep) {
+            Ok(json3) => HttpResponse::Ok().json(json3),
+            Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
         }
-    };
+    }
 
-    let user_json = match serde_json::to_string(&user) {
-        Ok(j) => j,
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+    else if conn.is_teacher() {
+        let user_json = match serde_json::to_string(&user) {
+            Ok(j) => j,
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
+
+        let teacher_account;
+
+        let teacher_accounts = match conn.get_teacher_accounts() {
+            Ok(t) => {
+                teacher_account = match t.into_iter().filter_map(|t| {
+                    if t.teacher_id == user.id {
+                        Some(t)
+                    } else {
+                        None
+                    }})
+                    .collect::<Vec<TeacherAccount>>().get(0) {
+                        Some(t) => t.to_owned(),
+                        None => {
+                            return HttpResponse::InternalServerError().json(json!({"error": "A teacher account with this Teacher ID does not exist."}));
+                        },
+                    };
+
+                match serde_json::to_string(&teacher_account) {
+                    Ok(s) => s,
+                    Err(_) => return HttpResponse::InternalServerError().json(json!({"error": "Failed to serialize teacher account."})),
+                }
+            }
+
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
+
+        let json_prep = format!("{{\"user\": {}, \"teacher_account\": {}}}", user_json, teacher_accounts);
+
+        match serde_json::from_str::<Value>(&json_prep) {
+            Ok(j) => HttpResponse::Ok().json(j),
+            Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
         }
-    };
+    }
 
-    let json_prep = format!(
-        "{{\"user\": {}, \"enrollments\": {}, \"standing\": {}, \"courses\": {}}}",
-        user_json, enrollments_json, standing_json, courses_json
-    );
+    else {
+        let user_json = match serde_json::to_string(&user) {
+            Ok(j) => j,
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"error": e.to_string()}));
+            }
+        };
 
-    match serde_json::from_str::<Value>(&json_prep) {
-        Ok(json3) => HttpResponse::Ok().json(json3),
-        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+        let json_prep = format!("{{\"user\": {}}}", user_json);
+
+        match serde_json::from_str::<Value>(&json_prep) {
+            Ok(json3) => HttpResponse::Ok().json(json3),
+            Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+        }
+    
     }
 }
 
@@ -1215,14 +1290,10 @@ pub async fn get_stats(req: HttpRequest) -> impl Responder {
             let json = serde_json::to_string(&s);
             match json {
                 Ok(j) => HttpResponse::Ok().json(j),
-                Err(e) => {
-                    HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-                }
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
             }
         }
-        Err(e) => {
-            HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
-        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
     }
 }
 

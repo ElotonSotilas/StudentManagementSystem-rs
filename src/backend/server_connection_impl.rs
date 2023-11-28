@@ -656,6 +656,22 @@ impl ServerConnection {
         }
     }
 
+    pub fn is_student(&self) -> bool {
+        if let Some(session) = &self.session {
+            session.role.to_lowercase() == "student"
+        } else {
+            false
+        }
+    }
+
+    pub fn is_teacher(&self) -> bool {
+        if let Some(session) = &self.session {
+            session.role.to_lowercase() == "teacher"
+        } else {
+            false
+        }
+    }
+
     pub fn is_admin(&self) -> bool {
         if let Some(session) = &self.session {
             session.role.to_lowercase() == "admin"
