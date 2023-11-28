@@ -107,13 +107,13 @@ impl ToSQL for StudentAccount {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(
-                "INSERT INTO STUDENT_ACCOUNTS (student_id, advisor_id, discipline, enrollment, cgpa, can_grad, cur_credit, cum_credit) 
+                "INSERT INTO STUDENT_ACCOUNT (student_id, advisor_id, discipline, enrollment, cgpa, can_grad, cur_credit, cum_credit) 
                 VALUES ({}, {}, '{}', '{}', {}, {}, {}, {})",
                 self.student_id, self.advisor_id, self.discipline, self.enrollment, self.cgpa, self.can_grad, self.cur_credit, self.cum_credit
             ),
 
             Action::Update => format!(
-                "UPDATE STUDENT_ACCOUNTS SET student_id = {}, advisor_id = {}, discipline = '{}', 
+                "UPDATE STUDENT_ACCOUNT SET student_id = {}, advisor_id = {}, discipline = '{}', 
                 enrollment = '{}', cgpa = {}, can_grad = {}, cur_credit = {}, cum_credit = {} 
                 WHERE id = {}",
                 self.student_id, self.advisor_id, self.discipline, self.enrollment, self.cgpa, 
@@ -121,7 +121,7 @@ impl ToSQL for StudentAccount {
             ),
 
             Action::Delete => format!(
-                "DELETE FROM STUDENT_ACCOUNTS WHERE id = {}", self.id
+                "DELETE FROM STUDENT_ACCOUNT WHERE id = {}", self.id
             )
         }
     }
@@ -138,24 +138,24 @@ impl ToSQL for TeacherAccount {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(
-                r#"INSERT INTO "TEACHER_ACCOUNTS" ("teacher_id", "dept_id") VALUES ({}, {})"#,
+                r#"INSERT INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id") VALUES ({}, {})"#,
                 self.teacher_id, self.dept_id
             ),
 
             Action::Update => format!(
-                r#"UPDATE "TEACHER_ACCOUNTS" SET "teacher_id" = {}, "dept_id" = {} WHERE "id" = {}"#,
+                r#"UPDATE "TEACHER_ACCOUNT" SET "teacher_id" = {}, "dept_id" = {} WHERE "id" = {}"#,
                 self.teacher_id, self.dept_id, self.id
             ),
 
             Action::Delete => format!(
-                r#"DELETE FROM "TEACHER_ACCOUNTS" WHERE "id" = {}"#, self.id
+                r#"DELETE FROM "TEACHER_ACCOUNT" WHERE "id" = {}"#, self.id
             )
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Course {
+pub struct Courses {
     pub id: i32,
     pub teacher_id: i32,
     pub course: String,
@@ -165,7 +165,7 @@ pub struct Course {
     pub timeslots: String,
 }
 
-impl ToSQL for Course {
+impl ToSQL for Courses {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(
@@ -218,12 +218,12 @@ impl ToSQL for StudentCourse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Department {
+pub struct Departments {
     pub id: i32,
     pub name: String,
 }
 
-impl ToSQL for Department {
+impl ToSQL for Departments {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(

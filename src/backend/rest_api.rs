@@ -7,7 +7,7 @@ use crate::login_macro as login;
 use super::{
     filter::{Filter, UsersFilter},
     server_connection_impl::*,
-    table_models::Course,
+    table_models::Courses,
 };
 
 #[get("/")]
@@ -512,7 +512,7 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().json(json!({"error": "Invalid course cost."}));
     }
 
-    let course = Course {
+    let course = Courses {
         id: 0, // This will be set by the database.
         description,
         teacher_id,
@@ -846,7 +846,7 @@ pub async fn get_self(req: HttpRequest) -> impl Responder {
                         None
                     }
                 })
-                .collect::<Vec<Course>>();
+                .collect::<Vec<Courses>>();
             match serde_json::to_string(&c) {
                 Ok(j) => j,
                 Err(e) => {
@@ -1024,7 +1024,7 @@ pub async fn unenroll(req: HttpRequest) -> impl Responder {
         .unwrap()
         .iter()
         .filter_map(|c| Some(c.clone()))
-        .collect::<Vec<Course>>();
+        .collect::<Vec<Courses>>();
 
     match conn.drop_courses(course_list) {
         Ok(_) => {

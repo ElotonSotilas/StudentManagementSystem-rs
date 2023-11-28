@@ -189,7 +189,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn register_courses(&mut self, courses: Vec<Course>) -> Result<()> {
+    pub fn register_courses(&mut self, courses: Vec<Courses>) -> Result<()> {
         if let Some(s) = &self.session {
             match s.role.to_lowercase().as_str() {
                 "admin" => {
@@ -242,7 +242,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn remove_courses(&mut self, courses: Vec<Course>) -> Result<()> {
+    pub fn remove_courses(&mut self, courses: Vec<Courses>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "admin" => {
@@ -289,7 +289,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn update_courses(&mut self, courses: Vec<Course>) -> Result<()> {
+    pub fn update_courses(&mut self, courses: Vec<Courses>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "admin" => {
@@ -361,7 +361,7 @@ impl ServerConnection {
         Ok(users)
     }
 
-    pub fn search_courses(&self, query: String) -> Result<Vec<Course>> {
+    pub fn search_courses(&self, query: String) -> Result<Vec<Courses>> {
         let findings = self.db.find(
             Table::Courses,
             vec![],
@@ -385,7 +385,7 @@ impl ServerConnection {
         Ok(courses)
     }
 
-    pub fn get_departments(&self) -> Result<Vec<Department>> {
+    pub fn get_departments(&self) -> Result<Vec<Departments>> {
         let findings = self.db.find(
             Table::Departments,
             vec![],
@@ -406,14 +406,14 @@ impl ServerConnection {
         Ok(departments)
     }
 
-    pub fn get_department(&self, id: i32) -> Result<Department> {
+    pub fn get_department(&self, id: i32) -> Result<Departments> {
         let findings = self.db.find(
             Table::Departments,
             vec![Filter::Departments(DepartmentsFilter::Id(id))],
             None,
         )?;
 
-        let departments: Vec<Department> = findings
+        let departments: Vec<Departments> = findings
             .into_iter()
             .filter_map(|x| {
                 if let ReceiverType::Department(department) = x {
@@ -433,7 +433,7 @@ impl ServerConnection {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "admin" => {
-                    let department = Department {
+                    let department = Departments {
                         id: 0,
                         name: department.to_owned(),
                     };
@@ -448,7 +448,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn remove_department(&mut self, department: Department) -> Result<()> {
+    pub fn remove_department(&mut self, department: Departments) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "admin" => {
@@ -498,7 +498,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn enroll_courses(&mut self, courses: Vec<Course>) -> Result<()> {
+    pub fn enroll_courses(&mut self, courses: Vec<Courses>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "student" => {
@@ -608,7 +608,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn drop_courses(&mut self, courses: Vec<Course>) -> Result<()> {
+    pub fn drop_courses(&mut self, courses: Vec<Courses>) -> Result<()> {
         if let Some(session) = &self.session {
             match session.role.to_lowercase().as_str() {
                 "student" => {
@@ -702,7 +702,7 @@ impl ServerConnection {
 
 // Private methods
 impl ServerConnection {
-    fn transmute_course_to_student_course(&self, course: Course) -> StudentCourse {
+    fn transmute_course_to_student_course(&self, course: Courses) -> StudentCourse {
         StudentCourse {
             student_id: self.session.as_ref().unwrap().id,
             course_id: course.id,

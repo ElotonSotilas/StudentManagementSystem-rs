@@ -22,9 +22,9 @@ pub enum ReceiverType {
     User(User),
     StudentAccount(StudentAccount),
     TeacherAccount(TeacherAccount),
-    Course(Course),
+    Course(Courses),
     StudentCourse(StudentCourse),
-    Department(Department),
+    Department(Departments),
 }
 
 pub struct DbDriver {
@@ -240,7 +240,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn delete_course(&mut self, data: &Course) -> Result<()> {
+    fn delete_course(&mut self, data: &Courses) -> Result<()> {
         let sql = data.to_sql(Action::Delete);
         self.c.connection.execute(&sql, [])?;
 
@@ -254,7 +254,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn delete_department(&mut self, data: &Department) -> Result<()> {
+    fn delete_department(&mut self, data: &Departments) -> Result<()> {
         let sql = data.to_sql(Action::Delete);
         self.c.connection.execute(&sql, [])?;
 
@@ -282,7 +282,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn update_course(&mut self, data: &Course) -> Result<()> {
+    fn update_course(&mut self, data: &Courses) -> Result<()> {
         let sql = data.to_sql(Action::Update);
         self.c.connection.execute(&sql, [])?;
 
@@ -296,7 +296,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn update_department(&mut self, data: &Department) -> Result<()> {
+    fn update_department(&mut self, data: &Departments) -> Result<()> {
         let sql = data.to_sql(Action::Update);
         self.c.connection.execute(&sql, [])?;
 
@@ -324,7 +324,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn insert_course(&mut self, data: &Course) -> Result<()> {
+    fn insert_course(&mut self, data: &Courses) -> Result<()> {
         let sql = data.to_sql(Action::Insert);
         self.c.connection.execute(&sql, [])?;
 
@@ -338,7 +338,7 @@ impl DbDriver {
         Ok(())
     }
 
-    fn insert_department(&mut self, data: &Department) -> Result<()> {
+    fn insert_department(&mut self, data: &Departments) -> Result<()> {
         let sql = data.to_sql(Action::Insert);
         self.c.connection.execute(&sql, [])?;
 
@@ -369,7 +369,7 @@ impl DbDriver {
             let id: i32 = row.get(0)?;
             let name: String = row.get(1)?;
 
-            departments.push(ReceiverType::Department(Department {
+            departments.push(ReceiverType::Department(Departments {
                 id,
                 name,
             }))
@@ -444,7 +444,7 @@ impl DbDriver {
             let cr_cost: i32 = row.get(5)?;
             let timeslots: String = row.get(6)?;
 
-            courses.push(ReceiverType::Course(Course {
+            courses.push(ReceiverType::Course(Courses {
                 id,
                 teacher_id,
                 course,

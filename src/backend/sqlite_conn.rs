@@ -32,7 +32,7 @@ impl DatabaseConnection {
             CREATE TABLE IF NOT EXISTS "STUDENT_ACCOUNT" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "student_id" INTEGER NOT NULL UNIQUE,
-                "advisor_id" INTEGER,
+                "advisor_id" INTEGER NOT NULL,
                 "discipline" TEXT NOT NULL,
                 "enrollment" TEXT NOT NULL,
                 "cgpa" REAL NOT NULL,
@@ -40,14 +40,13 @@ impl DatabaseConnection {
                 "cur_credit" INTEGER NOT NULL,
                 "cum_credit" INTEGER NOT NULL,
                 FOREIGN KEY ("student_id") REFERENCES "USERS"("id"),
-                FOREIGN KEY ("advisor_id") REFERENCES "USERS"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             
             CREATE TABLE IF NOT EXISTS "TEACHER_ACCOUNT" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "teacher_id" INTEGER NOT NULL UNIQUE,
-                "dept_id" INTEGER,
+                "dept_id" INTEGER NOT NULL,
                 FOREIGN KEY ("teacher_id") REFERENCES "USERS"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
@@ -86,7 +85,7 @@ impl DatabaseConnection {
             BEGIN
                 INSERT OR REPLACE INTO "STUDENT_ACCOUNT" ("student_id", "advisor_id", "discipline", 
                 "enrollment", "can_grad", "cgpa", "cur_credit", "cum_credit")
-                VALUES (NEW.id, NULL, '', '', FALSE, 0.0, 0, 0);
+                VALUES (NEW.id, 0, '', '', FALSE, 0.0, 0, 0);
                 DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
             END;
 
@@ -97,7 +96,7 @@ impl DatabaseConnection {
             BEGIN
                 INSERT OR REPLACE INTO "STUDENT_ACCOUNT" ("student_id", "advisor_id", "discipline", 
                 "enrollment", "can_grad", "cgpa", "cur_credit", "cum_credit")
-                VALUES (NEW.id, NULL, '', '', FALSE, 0.0, 0, 0);
+                VALUES (NEW.id, 0, '', '', FALSE, 0.0, 0, 0);
                 DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
             END;
 
