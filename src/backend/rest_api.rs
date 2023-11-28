@@ -67,6 +67,219 @@ pub async fn get_teachers() -> impl Responder {
     }
 }
 
+#[get("/departments")]
+pub async fn get_departments() -> impl Responder {
+    let conn = ServerConnection::new();
+    let departments = conn.get_departments();
+    match departments {
+        Ok(d) => {
+            let json = serde_json::to_string(&d);
+            match json {
+                Ok(j) => HttpResponse::Ok().body(j),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+            }
+        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[get("/departments/{id}")]
+pub async fn get_department(req: HttpRequest) -> impl Responder {
+    let conn = ServerConnection::new();
+    let request_headers = req.headers();
+    let id = match request_headers.get("id") {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().json(json!({"error": "Missing department id."})),
+    }
+    .to_str()
+    .unwrap();
+
+    let id = match id.parse::<i32>() {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({"error": "Invalid department id."}))
+        }
+    };
+
+    let department = conn.get_department(id);
+    match department {
+        Ok(d) => {
+            let json = serde_json::to_string(&d);
+            match json {
+                Ok(j) => HttpResponse::Ok().body(j),
+                Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+            }
+        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[post("/departments")]
+pub async fn new_department(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+    login!(login_email, login_password, conn);
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
+    }
+
+    let department = request_headers.get("name").unwrap().to_str().unwrap();
+
+    let department = conn.new_department(department);
+    match department {
+        Ok(_) => {
+            HttpResponse::Ok().json(json!({"message": "Successfully created department."}))
+        }
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[delete("/departments/{id}")]
+pub async fn delete_department(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+    login!(login_email, login_password, conn);
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
+    }
+
+    let department = req.match_info().get("id").unwrap_or_else(|| "0");
+    let department = department.parse::<i32>().unwrap_or_default();
+
+    if department == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing department id."}));
+    }
+
+    let department = conn.get_department(department);
+    let department = match department {
+        Ok(d) => d,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let department = conn.remove_department(department);
+    match department {
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully deleted department."})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[post("/admin/department/{id}")]
+pub async fn invite_to_department(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+    login!(login_email, login_password, conn);
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
+    }
+
+    let department = req.match_info().get("id").unwrap();
+    let department = department.parse::<i32>().unwrap_or_default();
+
+    if department == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing department id."}));
+    }
+
+    let teacher = request_headers.get("teacher_id");
+
+    if teacher.is_none() {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing teacher id."}));
+    }
+
+    let teacher = teacher.unwrap().to_str().unwrap();
+    let teacher = teacher.parse::<i32>().unwrap_or_default();
+
+    if teacher == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Invalid teacher id."}));
+    }
+
+    let department = conn.get_department(department);
+    let department = match department {
+        Ok(d) => d,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    let teachers = conn.get_teacher_accounts();
+    let mut teacher = match teachers {
+        Ok(t) => match t.into_iter().filter(|t| t.teacher_id == teacher).collect::<Vec<_>>() {
+            v if v.is_empty() => {
+                return HttpResponse::BadRequest().json(json!({"error": "Teacher not found."}))
+            }
+            v => v[0].to_owned(),
+        },
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    teacher.dept_id = department.id;
+
+    let invitation = conn.update_teacher_account(teacher);
+
+    match invitation {
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully invited teacher to department."})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[delete("/admin/department/{id}")]
+pub async fn kick_from_department(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+    login!(login_email, login_password, conn);
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
+    }
+
+    let department = req.match_info().get("id").unwrap();
+    let department = department.parse::<i32>().unwrap_or_default();
+
+    if department == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing department id."}));
+    }
+
+    let teacher = request_headers.get("teacher_id");
+    if teacher.is_none() {
+        return HttpResponse::BadRequest().json(json!({"error": "Missing teacher id."}));
+    }
+
+    let teacher = teacher.unwrap().to_str().unwrap();
+    let teacher = teacher.parse::<i32>().unwrap_or_default();
+
+    if teacher == 0 {
+        return HttpResponse::BadRequest().json(json!({"error": "Invalid teacher id."}));
+    }
+
+    let teachers = conn.get_teacher_accounts();
+    let mut teacher = match teachers {
+        Ok(t) => match t.into_iter().filter(|t| t.teacher_id == teacher).collect::<Vec<_>>() {
+            v if v.is_empty() => {
+                return HttpResponse::BadRequest().json(json!({"error": "Teacher not found."}))
+            }
+            v => v[0].to_owned(),
+        },
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    };
+
+    teacher.dept_id = 0;
+
+    let invitation = conn.update_teacher_account(teacher);
+
+    match invitation {
+        Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully kicked teacher from department."})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
 #[get("/courses")]
 pub async fn get_courses() -> impl Responder {
     let conn = ServerConnection::new();
@@ -252,7 +465,6 @@ pub async fn new_course(req: HttpRequest) -> impl Responder {
 
     let login_email = request_headers.get("login_email");
     let login_password = request_headers.get("login_password");
-
     login!(login_email, login_password, conn);
 
     let course = request_headers.get("name");
@@ -441,14 +653,8 @@ pub async fn admin(req: HttpRequest) -> impl Responder {
     let login_password = request_headers.get("login_password");
 
     login!(login_email, login_password, conn);
-
-    let user = conn
-        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .to_owned();
-
-    if user.role != "admin" {
-        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized"}));
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
     }
 
     return HttpResponse::Ok().json(json!({"message": "Success"}));
@@ -463,14 +669,8 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
     let login_password = request_headers.get("login_password");
 
     login!(login_email, login_password, conn);
-
-    let user = conn
-        .search_users(format!("{}", login_email.unwrap().to_str().unwrap()))
-        .unwrap()[0]
-        .to_owned();
-
-    if user.role != "admin" {
-        return HttpResponse::BadRequest().json(json!({"error": "Unauthorized"}));
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
     }
 
     let id = match req.match_info().get("id").unwrap().parse::<i32>() {
@@ -493,7 +693,7 @@ pub async fn update_user(req: HttpRequest) -> impl Responder {
         Some(u) => u.to_str().unwrap().to_string(),
         None => String::new(),
     };
-    let mut password = match request_headers.get("password") {
+    let password = match request_headers.get("password") {
         Some(p) => p.to_str().unwrap().to_string(),
         None => String::new(),
     };
@@ -723,7 +923,7 @@ pub async fn update_self(req: HttpRequest) -> impl Responder {
         Some(p) => {
             user.forcenewpw = false;
             p.to_str().unwrap().to_string()
-        },
+        }
         None => String::new(),
     };
     let mut phone = match phone {
@@ -983,7 +1183,7 @@ pub async fn register_admin(req: HttpRequest) -> impl Responder {
         password,
         email,
         phone,
-        verified: false,
+        verified: true,
         suspended: false,
         forcenewpw: false,
         role: String::from("admin"),
@@ -992,6 +1192,37 @@ pub async fn register_admin(req: HttpRequest) -> impl Responder {
     match conn.register_user(u) {
         Ok(_) => HttpResponse::Ok().json(json!({"message": "Successfully registered."})),
         Err(e) => HttpResponse::InternalServerError().json(json!({"error": e.to_string()})),
+    }
+}
+
+#[get("/admin/stats")]
+pub async fn get_stats(req: HttpRequest) -> impl Responder {
+    let mut conn = ServerConnection::new();
+    let request_headers = req.headers();
+
+    let login_email = request_headers.get("login_email");
+    let login_password = request_headers.get("login_password");
+    login!(login_email, login_password, conn);
+
+    if !conn.is_admin() {
+        return HttpResponse::Unauthorized().json(json!({"error": "Unauthorized"}));
+    }
+
+    let stats = conn.generate_statistics();
+
+    match stats {
+        Ok(s) => {
+            let json = serde_json::to_string(&s);
+            match json {
+                Ok(j) => HttpResponse::Ok().json(j),
+                Err(e) => {
+                    HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
+                }
+            }
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -1008,7 +1239,7 @@ macro_rules! login_macro {
                     match $conn.login(username, password) {
                         Ok(_) => {},
                         Err(_) => {
-                            return HttpResponse::BadRequest().json(json!({"error": "Invalid login password."}));
+                            return HttpResponse::BadRequest().json(json!({"error": "Invalid login credentials."}));
                         }
                     }
                 },

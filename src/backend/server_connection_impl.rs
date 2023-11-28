@@ -8,7 +8,10 @@ use anyhow::Ok;
 use anyhow::Result;
 use chrono::Datelike;
 use regex::Regex;
+use serde_derive::Deserialize;
+use serde_derive::Serialize;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Statistics {
     pub registered_users: i32,
     pub suspended_users: i32,
@@ -48,23 +51,6 @@ impl ServerConnection {
             .collect();
 
         Ok(u)
-    }
-
-    pub fn get_user(&self, id: i32) -> Result<User> {
-        let finding = self
-            .db
-            .find(Table::Users, vec![Filter::Users(UsersFilter::Id(id))], None)?;
-
-        // this cannot have more than 1 entry, that's pretty much a bug if it happens, blame the database
-        assert!(finding.len() <= 1);
-
-        if finding.is_empty() {
-            Err(anyhow!("No user found"))
-        } else if let ReceiverType::User(user) = &finding[0] {
-            Ok(user.to_owned())
-        } else {
-            Err(anyhow!("Internal server error"))
-        }
     }
 
     pub fn get_users_by_filters(&self, filters: Vec<Filter>) -> Result<Vec<User>> {
@@ -420,6 +406,63 @@ impl ServerConnection {
         Ok(departments)
     }
 
+    pub fn get_department(&self, id: i32) -> Result<Department> {
+        let findings = self.db.find(
+            Table::Departments,
+            vec![Filter::Departments(DepartmentsFilter::Id(id))],
+            None,
+        )?;
+
+        let departments: Vec<Department> = findings
+            .into_iter()
+            .filter_map(|x| {
+                if let ReceiverType::Department(department) = x {
+                    Some(department)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let department = departments.get(0).ok_or_else(|| anyhow!("Department not found."))?;
+
+        Ok(department.to_owned())
+    }
+
+    pub fn new_department(&mut self, department: &str) -> Result<()> {
+        if let Some(session) = &self.session {
+            match session.role.to_lowercase().as_str() {
+                "admin" => {
+                    let department = Department {
+                        id: 0,
+                        name: department.to_owned(),
+                    };
+                    self.db.insert(vec![ReceiverType::Department(department)])?;
+
+                    Ok(())
+                }
+                _ => Err(anyhow!("Only admins can create departments.")),
+            }
+        } else {
+            Err(anyhow!("Must be signed in."))
+        }
+    }
+
+    pub fn remove_department(&mut self, department: Department) -> Result<()> {
+        if let Some(session) = &self.session {
+            match session.role.to_lowercase().as_str() {
+                "admin" => {
+                    self.db.delete(vec![ReceiverType::Department(department)])?;
+
+                    Ok(())
+                }
+                _ => Err(anyhow!("Only admins can remove departments.")),
+            }
+        } else {
+            Err(anyhow!("Must be signed in."))
+        }
+    }
+
     pub fn get_teacher_accounts(&self) -> Result<Vec<TeacherAccount>> {
         let findings = self.db.find(
             Table::TeacherAccount,
@@ -439,6 +482,20 @@ impl ServerConnection {
             .collect();
 
         Ok(teacher_accounts)
+    }
+
+    pub fn update_teacher_account(&mut self, teacher_account: TeacherAccount) -> Result<()> {
+        if let Some(session) = &self.session {
+            match session.role.to_lowercase().as_str() {
+                "admin" => {
+                    self.db.update(vec![ReceiverType::TeacherAccount(teacher_account)])?;
+                    Ok(())
+                }
+                _ => Err(anyhow!("Only admins can update teacher accounts.")),
+            }
+        } else {
+            Err(anyhow!("Must be signed in."))
+        }
     }
 
     pub fn enroll_courses(&mut self, courses: Vec<Course>) -> Result<()> {
@@ -599,6 +656,14 @@ impl ServerConnection {
         }
     }
 
+    pub fn is_admin(&self) -> bool {
+        if let Some(session) = &self.session {
+            session.role.to_lowercase() == "admin"
+        } else {
+            false
+        }
+    }
+
     pub fn generate_statistics(&self) -> Result<Statistics> {
         let registered_users = self.get_users()?.len() as i32;
         let suspended_users = self
@@ -649,7 +714,7 @@ impl ServerConnection {
         }
     }
 
-    fn update_user_as_student(&mut self, user: User) -> Result<()> {
+    fn update_user_as_student(&mut self, mut user: User) -> Result<()> {
         let binding =
             self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
@@ -666,16 +731,30 @@ impl ServerConnection {
         if user.role != u.role {
             return Err(anyhow!("Role cannot be changed."));
         }
+        
+        if user.password.is_empty() || user.password.starts_with("$argon2id") {
+            user.password = u.password.to_owned();
+        } else {
+            let salt = password::generate_salt();
+            user.password = password::hash(&user.password, salt);
+        }
 
         self.db.update(vec![ReceiverType::User(user)])?;
 
         Ok(())
     }
 
-    fn update_user_as_admin(&mut self, user: User) -> Result<()> {
+    fn update_user_as_admin(&mut self, mut user: User) -> Result<()> {
         let binding =
             self.get_users_by_filters(vec![Filter::Users(UsersFilter::Id(user.id.clone()))])?;
         let u = binding.get(0).ok_or_else(|| anyhow!("User not found."))?;
+
+        if user.password.is_empty() || user.password.starts_with("$argon2id") {
+            user.password = u.password.to_owned();
+        } else {
+            let salt = password::generate_salt();
+            user.password = password::hash(&user.password, salt);
+        }
 
         self.db.update(vec![ReceiverType::User(user)])?;
 

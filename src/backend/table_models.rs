@@ -73,7 +73,7 @@ impl ToSQL for User {
                         self.verified, self.suspended, self.forcenewpw, self.role, self.id
                     )
                 }
-                
+
                 format!(
                     "UPDATE USERS SET username = '{}', password = '{}', email = '{}', phone = '{}', 
                         verified = {}, suspended = {}, forcenewpw = {}, role = '{}' 
@@ -132,20 +132,19 @@ pub struct TeacherAccount {
     pub id: i32,
     pub teacher_id: i32,
     pub dept_id: i32,
-    pub dept: String,
 }
 
 impl ToSQL for TeacherAccount {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(
-                r#"INSERT INTO "TEACHER_ACCOUNTS" ("teacher_id", "dept_id", "dept") VALUES ({}, {}, '{}')"#,
-                self.teacher_id, self.dept_id, self.dept
+                r#"INSERT INTO "TEACHER_ACCOUNTS" ("teacher_id", "dept_id") VALUES ({}, {})"#,
+                self.teacher_id, self.dept_id
             ),
 
             Action::Update => format!(
-                r#"UPDATE "TEACHER_ACCOUNTS" SET "teacher_id" = {}, "dept_id" = {}, "dept" = '{}' WHERE "id" = {}"#,
-                self.teacher_id, self.dept_id, self.dept, self.id
+                r#"UPDATE "TEACHER_ACCOUNTS" SET "teacher_id" = {}, "dept_id" = {} WHERE "id" = {}"#,
+                self.teacher_id, self.dept_id, self.id
             ),
 
             Action::Delete => format!(
@@ -221,7 +220,6 @@ impl ToSQL for StudentCourse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Department {
     pub id: i32,
-    pub dept_head: i32,
     pub name: String,
 }
 
@@ -229,13 +227,13 @@ impl ToSQL for Department {
     fn to_sql(&self, a: Action) -> String {
         match a {
             Action::Insert => format!(
-                "INSERT INTO departments (dept_head, name) VALUES ({}, '{}')",
-                self.dept_head, self.name
+                "INSERT INTO departments (name) VALUES ('{}')",
+                self.name
             ),
 
             Action::Update => format!(
-                "UPDATE departments SET dept_head = {}, name = '{}' WHERE id = {}",
-                self.dept_head, self.name, self.id
+                "UPDATE departments SET name = '{}' WHERE id = {}",
+                self.name, self.id
             ),
 
             Action::Delete => format!(

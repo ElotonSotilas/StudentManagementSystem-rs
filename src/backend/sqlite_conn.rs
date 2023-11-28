@@ -47,10 +47,8 @@ impl DatabaseConnection {
             CREATE TABLE IF NOT EXISTS "TEACHER_ACCOUNT" (
                 "id" INTEGER NOT NULL UNIQUE,
                 "teacher_id" INTEGER NOT NULL UNIQUE,
-                "dept_id" INTEGER NOT NULL,
-                "dept" TEXT NOT NULL,
+                "dept_id" INTEGER,
                 FOREIGN KEY ("teacher_id") REFERENCES "USERS"("id"),
-                FOREIGN KEY ("dept_id") REFERENCES "DEPARTMENTS"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
             
@@ -77,13 +75,11 @@ impl DatabaseConnection {
             
             CREATE TABLE IF NOT EXISTS "DEPARTMENTS" (
                 "id" INTEGER NOT NULL,
-                "dept_head" INTEGER NOT NULL,
                 "name" TEXT NOT NULL,
-                FOREIGN KEY ("dept_head") REFERENCES "TEACHER_ACCOUNT"("id"),
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
 
-            CREATE TRIGGER IF NOT EXISTS "manage_student_account"
+            CREATE TRIGGER IF NOT EXISTS "manage_student_account_insert"
             AFTER INSERT ON "USERS"
             FOR EACH ROW
             WHEN NEW."role" = 'student'
@@ -94,13 +90,34 @@ impl DatabaseConnection {
                 DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
             END;
 
-            CREATE TRIGGER IF NOT EXISTS "manage_teacher_account"
+            CREATE TRIGGER IF NOT EXISTS "manage_student_account_update"
+            AFTER UPDATE ON "USERS"
+            FOR EACH ROW
+            WHEN NEW."role" = 'student'
+            BEGIN
+                INSERT OR REPLACE INTO "STUDENT_ACCOUNT" ("student_id", "advisor_id", "discipline", 
+                "enrollment", "can_grad", "cgpa", "cur_credit", "cum_credit")
+                VALUES (NEW.id, NULL, '', '', FALSE, 0.0, 0, 0);
+                DELETE FROM TEACHER_ACCOUNT WHERE "teacher_id" = NEW."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "manage_teacher_account_insert"
             AFTER INSERT ON "USERS"
             FOR EACH ROW
             WHEN NEW."role" = 'teacher'
             BEGIN
-                INSERT OR REPLACE INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id", "dept")
-                VALUES (NEW."id", 0, '');
+                INSERT OR REPLACE INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id")
+                VALUES (NEW."id", 0);
+                DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = NEW."id";
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS "manage_teacher_account_update"
+            AFTER UPDATE ON "USERS"
+            FOR EACH ROW
+            WHEN NEW."role" = 'teacher'
+            BEGIN
+                INSERT OR REPLACE INTO "TEACHER_ACCOUNT" ("teacher_id", "dept_id")
+                VALUES (NEW."id", 0);
                 DELETE FROM STUDENT_ACCOUNT WHERE "student_id" = NEW."id";
             END;
 
@@ -126,14 +143,14 @@ impl DatabaseConnection {
             FOR EACH ROW
             BEGIN
                 UPDATE "STUDENT_ACCOUNT"
-                SET "cgpa" = (
-                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                SET "cgpa" = COALESCE((
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / NULLIF(SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END), 0)
                     FROM "STUDENT_COURSES"
                     JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = "COURSES"."id"
                     WHERE "STUDENT_COURSES"."student_id" = NEW."student_id"
-                ),
+                ), 0.0),
                 "can_grad" = CASE
-                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id") >= 120 THEN 1
+                    WHEN COALESCE((SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id"), 0) >= 120 THEN 1
                     ELSE 0
                 END
                 WHERE "id" = NEW."student_id";
@@ -144,14 +161,14 @@ impl DatabaseConnection {
             FOR EACH ROW
             BEGIN
                 UPDATE "STUDENT_ACCOUNT"
-                SET "cgpa" = (
-                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                SET "cgpa" = COALESCE((
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / NULLIF(SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END), 0)
                     FROM "STUDENT_COURSES"
                     JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = "COURSES"."id"
                     WHERE "STUDENT_COURSES"."student_id" = NEW."student_id"
-                ),
+                ), 0.0),
                 "can_grad" = CASE
-                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id") >= 120 THEN 1
+                    WHEN COALESCE((SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = NEW."student_id"), 0) >= 120 THEN 1
                     ELSE 0
                 END
                 WHERE "id" = NEW."student_id";
@@ -162,18 +179,19 @@ impl DatabaseConnection {
             FOR EACH ROW
             BEGIN
                 UPDATE "STUDENT_ACCOUNT"
-                SET "cgpa" = (
-                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END)
+                SET "cgpa" = COALESCE((
+                    SELECT SUM(CASE WHEN "grade" >= 0 THEN "grade" * "cr_cost" ELSE 0 END) / NULLIF(SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END), 0)
                     FROM "STUDENT_COURSES"
                     JOIN "COURSES" ON "STUDENT_COURSES"."course_id" = COURSES."id"
                     WHERE "STUDENT_COURSES"."student_id" = OLD."student_id"
-                ),
+                ), 0.0),
                 "can_grad" = CASE
-                    WHEN (SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = OLD."student_id") >= 120 THEN 1
+                    WHEN COALESCE((SELECT SUM(CASE WHEN "grade" >= 0 THEN "cr_cost" ELSE 0 END) FROM "STUDENT_COURSES" WHERE "student_id" = OLD."student_id"), 0) >= 120 THEN 1
                     ELSE 0
                 END
-                WHERE id = OLD."student_id";
+                WHERE "id" = OLD."student_id";
             END;
+
             COMMIT;
             "#,
             )?;

@@ -350,12 +350,16 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM DEPARTMENTS WHERE {}",
-            conditions.join(&separator)
-        );
+        let sql = if filters.is_empty() {
+            format!("SELECT * FROM DEPARTMENTS")
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM DEPARTMENTS WHERE {}",
+                conditions.join(&separator)
+            )
+        };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
         let mut rows = stmt.query([])?;
@@ -363,12 +367,10 @@ impl DbDriver {
 
         while let Some(row) = rows.next().unwrap_or(None) {
             let id: i32 = row.get(0)?;
-            let dept_head: i32 = row.get(1)?;
-            let name: String = row.get(2)?;
+            let name: String = row.get(1)?;
 
             departments.push(ReceiverType::Department(Department {
                 id,
-                dept_head,
                 name,
             }))
         }
@@ -381,15 +383,18 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: &Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM STUDENT_COURSES WHERE {}",
-            conditions.join(&separator)
-        );
-
+        let sql = if filters.is_empty() {
+            format!("SELECT * FROM STUDENT_COURSES")
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM STUDENT_COURSES WHERE {}",
+                conditions.join(&separator)
+            )
+        };
+        
         let mut stmt = self.c.connection.prepare(&sql)?;
-
         let mut rows = stmt.query([])?;
         let mut student_courses = Vec::new();
 
@@ -458,15 +463,18 @@ impl DbDriver {
         filters: &[Filter],
         join_mode: &Associativity,
     ) -> Result<Vec<ReceiverType>> {
-        let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
-        let separator = join_mode.to_string();
-        let sql = format!(
-            "SELECT * FROM TEACHER_ACCOUNT WHERE {}",
-            conditions.join(&separator)
-        );
+        let sql = if filters.is_empty() {
+            format!("SELECT * FROM TEACHER_ACCOUNT")
+        } else {
+            let conditions: Vec<String> = filters.iter().map(|f| f.to_sql()).collect();
+            let separator = join_mode.to_string();
+            format!(
+                "SELECT * FROM TEACHER_ACCOUNT WHERE {}",
+                conditions.join(&separator)
+            )
+        };
 
         let mut stmt = self.c.connection.prepare(&sql)?;
-
         let mut rows = stmt.query([])?;
         let mut teacher_accounts = Vec::new();
 
@@ -474,17 +482,11 @@ impl DbDriver {
             let id: i32 = row.get(0)?;
             let teacher_id: i32 = row.get(1)?;
             let dept_id: i32 = row.get(2)?;
-            let dept: String = row.get(3)?;
-            println!(
-                "id: {}, teacher_id: {}, dept_id: {}, dept: {}",
-                id, teacher_id, dept_id, dept
-            );
 
             teacher_accounts.push(ReceiverType::TeacherAccount(TeacherAccount {
                 id,
                 teacher_id,
-                dept_id,
-                dept,
+                dept_id
             }))
         }
 
