@@ -8,9 +8,10 @@ edition = "2021"
 [dependencies]
 # Database and web server framework
 rusqlite = { version = "0.30.0", features = ["bundled"] }
-actix-web = "*"
+actix-web = { version = "*", features = ["rustls"] }
 actix-rt = "*"
 actix-cors = "*"
+rustls = "*"
 
 # Serde
 serde = "*"
