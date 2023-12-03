@@ -1,10 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{App, HttpServer};
 use backend::rest_api::*;
-use rustls::server::ServerConfig;
-use rustls::{Certificate, PrivateKey};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 mod backend;
 
@@ -12,32 +8,6 @@ extern crate actix_web;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let config = ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(
-            vec![Certificate(
-                BufReader::new(
-                    File::open("/usr/local/etc/letsencrypt/live/be.duyenle.com/cert.pem").unwrap(),
-                )
-                .lines()
-                .map(|l| l.unwrap())
-                .collect::<String>()
-                .into_bytes(),
-            )],
-            PrivateKey(
-                BufReader::new(
-                    File::open("/usr/local/etc/letsencrypt/live/be.duyenle.com/privkey.pem")
-                        .unwrap(),
-                )
-                .lines()
-                .map(|l| l.unwrap())
-                .collect::<String>()
-                .into_bytes(),
-            ),
-        )
-        .unwrap();
-
     let http_server = HttpServer::new(|| {
         App::new()
             .wrap(Cors::permissive())
@@ -67,7 +37,7 @@ async fn main() -> std::io::Result<()> {
             .service(register)
             .service(register_admin)
     })
-    .bind_rustls(("0.0.0.0", 8080), config)?;
+    .bind(("0.0.0.0", 8080))?;
 
     http_server.run().await
 }
